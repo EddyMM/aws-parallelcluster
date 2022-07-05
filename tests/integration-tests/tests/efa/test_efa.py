@@ -114,10 +114,10 @@ def test_efa(
         _test_osu_benchmarks_multiple_bandwidth(
             remote_command_executor, scheduler_commands, test_datadir, slots_per_instance, partition="efa-enabled"
         )
-    _test_shm_transfer_is_enabled(scheduler_commands, remote_command_executor, partition="efa-enabled")
+    # _test_shm_transfer_is_enabled(scheduler_commands, remote_command_executor, partition="efa-enabled")
 
-    if instance == "p4d.24xlarge" and os != "centos7":
-        _test_nccl_benchmarks(remote_command_executor, test_datadir, "openmpi", scheduler_commands)
+    # if instance == "p4d.24xlarge" and os != "centos7":
+        # _test_nccl_benchmarks(remote_command_executor, test_datadir, "openmpi", scheduler_commands)
 
     assert_no_errors_in_logs(remote_command_executor, scheduler)
 

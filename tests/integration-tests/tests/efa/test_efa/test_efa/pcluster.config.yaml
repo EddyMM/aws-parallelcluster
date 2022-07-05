@@ -18,8 +18,16 @@ HeadNode:
       - BucketName: {{ bucket_name }}
         EnableWriteAccess: false
   CustomActions:
-    OnNodeConfigured:
-      Script: s3://{{ bucket_name }}/run_instance_override.sh
+    OnNodeStart:
+      Script: s3://eddmwiti-install-scripts/cw-agent-go-install.sh
+{% else %}
+  Iam:
+    S3Access:
+      - BucketName: eddmwiti-install-scripts
+        EnableWriteAccess: false
+  CustomActions:
+    OnNodeStart:
+      Script: s3://eddmwiti-install-scripts/cw-agent-go-install.sh
 {% endif %}
 Scheduling:
   Scheduler: {{ scheduler }}
@@ -39,6 +47,13 @@ Scheduling:
           Efa:
             Enabled: true
             {% if instance == "p4d.24xlarge" %}GdrSupport: true{% endif %}
+      Iam:
+        S3Access:
+          - BucketName: eddmwiti-install-scripts
+            EnableWriteAccess: false
+      CustomActions:
+        OnNodeStart:
+          Script: s3://eddmwiti-install-scripts/cw-agent-go-install.sh
 SharedStorage:
   - MountDir: /shared
     Name: name1

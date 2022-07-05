@@ -101,6 +101,12 @@ def run_individual_osu_benchmark(
     scheduler_commands.assert_job_succeeded(job_id)
 
     output = remote_command_executor.run_remote_command(f"cat /shared/{benchmark_name}.out").stdout
+
+    logging.info(f"************** Benchmarks Output for {benchmark_name} ******************")
+    logging.info(output)
+    with open(f"/Users/eddmwiti/Learn/Bash/osu_logs/all_logs-with_cwagent_1-17/{benchmark_name}-{mpi_version}", "a+") as f:
+        f.write(output)
+    logging.info(f"************** End of Benchmarks Output for {benchmark_name} ******************")
     return job_id, output
 
 
