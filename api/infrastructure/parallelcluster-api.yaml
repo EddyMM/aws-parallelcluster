@@ -74,7 +74,7 @@ Parameters:
       Comma separated arn of the S3 buckets, to allow the lambda function to import/export from/to S3 when creating an FSx filesystem.
       WARNING - The setting is used only when EnableFSxS3Access is set to true. (example arn:aws:s3:::<S3_BUCKET_1>,arn:aws:s3:::<S3_BUCKET_2>)
     Type: String
-    AllowedPattern: ^arn:aws:s3:[a-z0-9\-]*:([0-9]{12})*:.+
+    AllowedPattern: ^($|arn:.*:s3:[a-z0-9\-]*:([0-9]{12})*:.+)
 
   PermissionsBoundaryPolicy:
     Description: |
@@ -477,6 +477,30 @@ Resources:
                     - !Ref Region
             Sid: ECS
 
+  FSxS3AccessPolicy:
+    Type: AWS::IAM::Policy
+    Condition: EnableFSxS3AccessCondition
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - iam:CreateServiceLinkedRole
+              - iam:AttachRolePolicy
+              - iam:PutRolePolicy
+            Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/s3.data-source.lustre.fsx.amazonaws.com/*
+            Effect: Allow
+            Sid: FSxS3PoliciesAttach
+          - Action:
+              - s3:Get*
+              - s3:List*
+              - s3:PutObject
+            Resource: !Split [",", !Ref FsxS3Buckets]
+            Effect: Allow
+            Sid: EnableFSxS3Access
+      Roles:
+        - !Ref ParallelClusterUserRole
+
   ParallelClusterClusterPolicy:
     Type: AWS::IAM::ManagedPolicy
     Condition: CreateIamResources
@@ -628,21 +652,6 @@ Resources:
                 iam:AWSServiceName:
                   - fsx.amazonaws.com
                   - s3.data-source.lustre.fsx.amazonaws.com
-          - Action:
-              - iam:CreateServiceLinkedRole
-              - iam:AttachRolePolicy
-              - iam:PutRolePolicy
-            Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/s3.data-source.lustre.fsx.amazonaws.com/*
-            Effect: Allow
-            Sid: FSxS3PoliciesAttach
-          - Action:
-              - s3:Get*
-              - s3:List*
-              - s3:PutObject
-            Resource: !Split [",", !Ref FsxS3Buckets]
-            Effect: Allow
-            Condition: EnableFSxS3AccessCondition
-            Sid: EnableFSxS3Access
           - Action:
               - lambda:CreateFunction
               - lambda:TagResource

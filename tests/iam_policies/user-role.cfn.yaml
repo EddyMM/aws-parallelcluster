@@ -20,12 +20,29 @@ Parameters:
     AllowedValues:
       - true
       - false
+  EnableFSxS3Access:
+    Description: |
+      When set to true the ParallelCluster API can access, write to the S3 buckets specified in the Filed FsxS3Bucket, it is needed to import/export from/to S3 when creating an FSx filesystem.
+      WARNING - setting this to true grants to the Lambda function S3 Get*, List* and PutObject privileges on the buckets specified in FsxS3Buckets.
+    Type: String
+    Default: false
+    AllowedValues:
+      - true
+      - false
+
+  FsxS3Buckets:
+    Description: |
+      Comma separated arn of the S3 buckets, to allow the lambda function to import/export from/to S3 when creating an FSx filesystem.
+      WARNING - The setting is used only when EnableFSxS3Access is set to true. (example arn:aws:s3:::<S3_BUCKET_1>,arn:aws:s3:::<S3_BUCKET_2>)
+    Type: String
+    AllowedPattern: ^($|arn:.*:s3:[a-z0-9\-]*:([0-9]{12})*:.+)
 
 Conditions:
   EnableIamPolicy: !Equals [!Ref EnableIamAdminAccess, true]
   EnablePermissionsBoundary: !Equals [!Ref EnablePermissionsBoundary, true]
   IsMultiRegion: !Equals [!Ref Region, '*']
   CreateIamResources: !Equals [true, true]  # to keep aligned the resources in the API stack
+  EnableFSxS3AccessCondition: !Equals [!Ref EnableFSxS3Access, true]
 
 Resources:
 
@@ -201,6 +218,30 @@ Resources:
                     - !Ref Region
             Sid: ECS
 
+  FSxS3AccessPolicy:
+    Type: AWS::IAM::Policy
+    Condition: EnableFSxS3AccessCondition
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - iam:CreateServiceLinkedRole
+              - iam:AttachRolePolicy
+              - iam:PutRolePolicy
+            Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/s3.data-source.lustre.fsx.amazonaws.com/*
+            Effect: Allow
+            Sid: FSxS3PoliciesAttach
+          - Action:
+              - s3:Get*
+              - s3:List*
+              - s3:PutObject
+            Resource: !Split [",", !Ref FsxS3Buckets]
+            Effect: Allow
+            Sid: EnableFSxS3Access
+      Roles:
+        - !Ref ParallelClusterUserRole
+
   ParallelClusterClusterPolicy:
     Type: AWS::IAM::ManagedPolicy
     Condition: CreateIamResources
@@ -352,18 +393,6 @@ Resources:
                 iam:AWSServiceName:
                   - fsx.amazonaws.com
                   - s3.data-source.lustre.fsx.amazonaws.com
-          - Action:
-              - iam:CreateServiceLinkedRole
-              - iam:AttachRolePolicy
-              - iam:PutRolePolicy
-            Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/s3.data-source.lustre.fsx.amazonaws.com/*
-            Effect: Allow
-          - Action:
-              - s3:Get*
-              - s3:List*
-              - s3:PutObject
-            Resource: '*'
-            Effect: Allow
           - Action:
               - lambda:CreateFunction
               - lambda:TagResource
