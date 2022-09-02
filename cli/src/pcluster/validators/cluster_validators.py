@@ -13,7 +13,7 @@ import re
 from collections import defaultdict
 from enum import Enum
 from itertools import combinations, product
-from typing import List
+from typing import Dict, List
 
 from pcluster.aws.aws_api import AWSApi
 from pcluster.aws.aws_resources import InstanceTypeInfo
@@ -71,6 +71,113 @@ HOST_NAME_MAX_LENGTH = 64
 # Max fqdn size is 255 characters, the first 64 are used for the hostname (e.g. queuename-st|dy-computeresourcename-N),
 # then we need to add an extra ., so we have 190 characters to be used for the clustername + domain-name.
 CLUSTER_NAME_AND_CUSTOM_DOMAIN_NAME_MAX_LENGTH = 255 - HOST_NAME_MAX_LENGTH - 1
+
+
+class FlexibleInstanceTypesValidator(Validator):
+    """Validator for Compute Resources that has multiple instance types."""
+
+    def _validate(
+        self,
+        compute_resource_name,
+        instance_types_info: Dict[str, InstanceTypeInfo],
+        disable_simultaneous_multithreading,
+    ):
+        self.validate_cpu_requirements(compute_resource_name, instance_types_info, disable_simultaneous_multithreading)
+        self.validate_accelerator_requirements(compute_resource_name, instance_types_info)
+
+    def validate_size(self, items, size, failure_message, failure_level):
+        """Check if a list of items has a specific size and add a failure entry if it's exceeded."""
+        if len(items) > size:
+            self._add_failure(failure_message, failure_level)
+
+    def validate_cpu_requirements(
+        self,
+        compute_resource_name: str,
+        instance_types_info: Dict[str, InstanceTypeInfo],
+        disable_simultaneous_multithreading: bool,
+    ):
+        """Confirm CPU requirements for Flexible Instance Types.
+
+        Instance types should have the same number of CPUs or same number of Cores if Simultaneous Multithreading
+        is disabled.
+        """
+        if disable_simultaneous_multithreading:
+            self.validate_size(
+                {instance_type_info.cores_count() for instance_type_info in instance_types_info.values()},
+                1,
+                f"Instance types listed under Compute Resource {compute_resource_name} must have the same number of "
+                f"CPU cores when Simultaneous Multithreading is disabled.",
+                FailureLevel.ERROR,
+            )
+        else:
+            self.validate_size(
+                {instance_type_info.vcpus_count() for instance_type_info in instance_types_info.values()},
+                1,
+                f"Instance types listed under Compute Resource {compute_resource_name} must have the same number of "
+                f"vCPUs.",
+                FailureLevel.ERROR,
+            )
+
+    def validate_accelerator_count(self, compute_resource_name: str, instance_types_info: Dict[str, InstanceTypeInfo]):
+        """Instance Types should have the same number of accelerators."""
+        self.validate_size(
+            {instance_type_info.gpu_count() for instance_type_info in instance_types_info.values()},
+            1,
+            f"Instance types listed under Compute Resource {compute_resource_name} must have the same number of GPUs.",
+            FailureLevel.ERROR,
+        )
+
+        self.validate_size(
+            {instance_type_info.inference_accelerator_count() for instance_type_info in instance_types_info.values()},
+            1,
+            f"Instance types listed under Compute Resource {compute_resource_name} must have the same number of "
+            f"Inference Accelerators.",
+            FailureLevel.ERROR,
+        )
+
+    def validate_accelerator_manufactures(
+        self, compute_resource_name: str, instance_types_info: Dict[str, InstanceTypeInfo]
+    ):
+        """Instance Types should have the same manufacturer type."""
+        unique_gpu_manufacturers = set()
+        for instance_type_info in instance_types_info.values():
+            unique_gpu_manufacturers.update(instance_type_info.gpu_manufacturers())
+
+        self.validate_size(
+            unique_gpu_manufacturers,
+            1,
+            (
+                f"Instance types listed under Compute Resource {compute_resource_name} must have the same GPU "
+                f"manufacturer. "
+            ),
+            FailureLevel.ERROR,
+        )
+
+        unique_accelerator_names = set()
+        for instance_type_info in instance_types_info.values():
+            unique_accelerator_names.update(instance_type_info.inference_accelerator_names())
+
+        self.validate_size(
+            unique_accelerator_names,
+            1,
+            (
+                f"Instance types listed under Compute Resource {compute_resource_name} must have the same inference "
+                f"accelerator manufacturer "
+            ),
+            FailureLevel.ERROR,
+        )
+
+    def validate_accelerator_requirements(
+        self, compute_resource_name: str, instance_types_info: Dict[str, InstanceTypeInfo]
+    ):
+        """Instance Types must have the same number of accelerator count per manufacturer.
+
+        ParallelCluster supports only GPU and Inference/Inferentia Accelerators.
+        Currently supported GPU manufacturers: NVIDIA
+        Currently supported Inferentia manufacturers: AWS
+        """
+        self.validate_accelerator_count(compute_resource_name, instance_types_info)
+        self.validate_accelerator_manufactures(compute_resource_name, instance_types_info)
 
 
 class ClusterNameValidator(Validator):

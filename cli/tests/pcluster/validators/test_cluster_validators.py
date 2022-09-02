@@ -28,6 +28,7 @@ from pcluster.validators.cluster_validators import (
     EfaSecurityGroupValidator,
     EfaValidator,
     ExistingFsxNetworkingValidator,
+    FlexibleInstanceTypesValidator,
     FsxArchitectureOsValidator,
     HeadNodeImdsValidator,
     HostedZoneValidator,
@@ -187,6 +188,184 @@ def test_max_count_validator(resource_name, resources_length, max_length, expect
 )
 def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_type, expected_message):
     actual_failures = SchedulableMemoryValidator().execute(schedulable_memory, ec2memory, instance_type)
+    assert_failure_messages(actual_failures, expected_message)
+
+
+# ---------------- Flexible Instance Types validators ---------------- #
+
+
+@pytest.mark.parametrize(
+    "instance_types_info, disable_simultaneous_multithreading, expected_message",
+    [
+        # Instance Types should have the same number of CPUs
+        (
+            {
+                "t2.micro": InstanceTypeInfo(
+                    {
+                        "InstanceType": "t2.micro",
+                        "VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2},
+                    }
+                ),
+                "t3.micro": InstanceTypeInfo(
+                    {
+                        "InstanceType": "t2.micro",
+                        "VCpuInfo": {"DefaultVCpus": 5, "DefaultCores": 2},
+                    }
+                ),
+            },
+            False,
+            "Instance types listed under Compute Resource TestComputeResource must have the same number of vCPUs.",
+        ),
+        # InstanceTypes should have the same number of cores if simultaneous multithreading is disabled
+        (
+            {
+                "t2.micro": InstanceTypeInfo(
+                    {
+                        "InstanceType": "t2.micro",
+                        "VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 4},
+                    }
+                ),
+                "t3.micro": InstanceTypeInfo(
+                    {
+                        "InstanceType": "t2.micro",
+                        "VCpuInfo": {"DefaultVCpus": 5, "DefaultCores": 2},
+                    }
+                ),
+            },
+            True,
+            "Instance types listed under Compute Resource TestComputeResource must have the same number of CPU "
+            "cores when Simultaneous Multithreading is disabled.",
+        ),
+        # Instance Types should have the same number of GPUs
+        (
+            {
+                "g4dn.xlarge": InstanceTypeInfo(
+                    {
+                        "InstanceType": "g4dn.xlarge",
+                        "VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2},
+                        "GpuInfo": {
+                            "Gpus": [
+                                {"Name": "T4", "Manufacturer": "NVIDIA", "Count": 1, "MemoryInfo": {"SizeInMiB": 16384}}
+                            ],
+                            "TotalGpuMemoryInMiB": 16384,
+                        },
+                    }
+                ),
+                "g5.xlarge": InstanceTypeInfo(
+                    {
+                        "InstanceType": "g5.xlarge",
+                        "VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2},
+                        "GpuInfo": {
+                            "Gpus": [
+                                {
+                                    "Name": "A10G",
+                                    "Manufacturer": "NVIDIA",
+                                    "Count": 2,
+                                    "MemoryInfo": {"SizeInMiB": 24576},
+                                }
+                            ],
+                            "TotalGpuMemoryInMiB": 24576,
+                        },
+                    }
+                ),
+            },
+            False,
+            "Instance types listed under Compute Resource TestComputeResource must have the same number of GPUs.",
+        ),
+        # Instance Types should have the same number of Accelerators
+        (
+            {
+                "inf1.6xlarge": InstanceTypeInfo(
+                    {
+                        "InstanceType": "inf1.6xlarge",
+                        "VCpuInfo": {"DefaultVCpus": 24, "DefaultCores": 12},
+                        "InferenceAcceleratorInfo": {
+                            "Accelerators": [{"Count": 4, "Name": "Inferentia", "Manufacturer": "AWS"}]
+                        },
+                    }
+                ),
+                "inf1.2xlarge": InstanceTypeInfo(
+                    {
+                        "InstanceType": "inf1.2xlarge",
+                        "VCpuInfo": {"DefaultVCpus": 24, "DefaultCores": 12},
+                        "InferenceAcceleratorInfo": {
+                            "Accelerators": [{"Count": 1, "Name": "Inferentia", "Manufacturer": "AWS"}]
+                        },
+                    }
+                ),
+            },
+            False,
+            "Instance types listed under Compute Resource TestComputeResource must have the same number of Inference "
+            "Accelerators.",
+        ),
+        # Instance Types should have the same GPU manufacturer
+        (
+            {
+                "g4dn.xlarge": InstanceTypeInfo(
+                    {
+                        "InstanceType": "g4dn.xlarge",
+                        "VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2},
+                        "GpuInfo": {
+                            "Gpus": [
+                                {"Name": "T4", "Manufacturer": "NVIDIA", "Count": 2, "MemoryInfo": {"SizeInMiB": 16384}}
+                            ],
+                            "TotalGpuMemoryInMiB": 16384,
+                        },
+                    }
+                ),
+                "g5.xlarge": InstanceTypeInfo(
+                    {
+                        "InstanceType": "g5.xlarge",
+                        "VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2},
+                        "GpuInfo": {
+                            "Gpus": [
+                                {
+                                    "Name": "A10G",
+                                    "Manufacturer": "OtherGPUManufacturers",
+                                    "Count": 2,
+                                    "MemoryInfo": {"SizeInMiB": 24576},
+                                }
+                            ],
+                            "TotalGpuMemoryInMiB": 24576,
+                        },
+                    }
+                ),
+            },
+            False,
+            "Instance types listed under Compute Resource TestComputeResource must have the same GPU manufacturer.",
+        ),
+        # Instance Types should have the same Accelerator Name (Inferentia)
+        (
+            {
+                "inf1.6xlarge": InstanceTypeInfo(
+                    {
+                        "InstanceType": "inf1.6xlarge",
+                        "VCpuInfo": {"DefaultVCpus": 24, "DefaultCores": 12},
+                        "InferenceAcceleratorInfo": {
+                            "Accelerators": [{"Count": 4, "Name": "Inferentia", "Manufacturer": "AWS"}]
+                        },
+                    }
+                ),
+                "inf1.2xlarge": InstanceTypeInfo(
+                    {
+                        "InstanceType": "inf1.2xlarge",
+                        "VCpuInfo": {"DefaultVCpus": 24, "DefaultCores": 12},
+                        "InferenceAcceleratorInfo": {
+                            "Accelerators": [{"Count": 4, "Name": "AnotherName", "Manufacturer": "AWS"}]
+                        },
+                    }
+                ),
+            },
+            False,
+            "Instance types listed under Compute Resource TestComputeResource must have the same inference "
+            "accelerator manufacturer",
+        ),
+    ],
+)
+def test_flexible_instance_types_validator(instance_types_info, disable_simultaneous_multithreading, expected_message):
+    actual_failures = FlexibleInstanceTypesValidator().execute(
+        "TestComputeResource", instance_types_info, disable_simultaneous_multithreading
+    )
     assert_failure_messages(actual_failures, expected_message)
 
 

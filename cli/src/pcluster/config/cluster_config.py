@@ -77,6 +77,7 @@ from pcluster.validators.cluster_validators import (
     EfaValidator,
     EfsIdValidator,
     ExistingFsxNetworkingValidator,
+    FlexibleInstanceTypesValidator,
     FsxArchitectureOsValidator,
     HeadNodeImdsValidator,
     HeadNodeLaunchTemplateValidator,
@@ -1705,6 +1706,14 @@ class SlurmFlexibleComputeResource(_BaseSlurmComputeResource):
                 if max_nics < least_max_nics:
                     least_max_nics = max_nics
         return least_max_nics
+
+    def _register_validators(self):
+        validator_args = dict(
+            compute_resource_name=self.name,
+            instance_types_info=self.instance_type_info_map,
+            disable_simultaneous_multithreading=self.disable_simultaneous_multithreading_manually,
+        )
+        self._register_validator(FlexibleInstanceTypesValidator, **validator_args)
 
 
 class SlurmComputeResource(_BaseSlurmComputeResource):
