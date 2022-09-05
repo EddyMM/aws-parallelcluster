@@ -195,7 +195,7 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
 
 
 @pytest.mark.parametrize(
-    "instance_types_info, disable_simultaneous_multithreading, expected_message",
+    "instance_types_info, disable_simultaneous_multithreading, efa_enabled, expected_message",
     [
         # Instance Types should have the same number of CPUs
         (
@@ -213,6 +213,7 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
                     }
                 ),
             },
+            False,
             False,
             "Instance types listed under Compute Resource TestComputeResource must have the same number of vCPUs.",
         ),
@@ -233,6 +234,7 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
                 ),
             },
             True,
+            False,
             "Instance types listed under Compute Resource TestComputeResource must have the same number of CPU "
             "cores when Simultaneous Multithreading is disabled.",
         ),
@@ -270,6 +272,7 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
                 ),
             },
             False,
+            False,
             "Instance types listed under Compute Resource TestComputeResource must have the same number of GPUs.",
         ),
         # Instance Types should have the same number of Accelerators
@@ -294,6 +297,7 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
                     }
                 ),
             },
+            False,
             False,
             "Instance types listed under Compute Resource TestComputeResource must have the same number of Inference "
             "Accelerators.",
@@ -332,6 +336,7 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
                 ),
             },
             False,
+            False,
             "Instance types listed under Compute Resource TestComputeResource must have the same GPU manufacturer.",
         ),
         # Instance Types should have the same Accelerator Name (Inferentia)
@@ -357,14 +362,79 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
                 ),
             },
             False,
+            False,
             "Instance types listed under Compute Resource TestComputeResource must have the same inference "
             "accelerator manufacturer",
         ),
+        # Instance Types should have the same EFA support status if EFA is enabled
+        (
+            {
+                "t2.micro": InstanceTypeInfo(
+                    {
+                        "InstanceType": "t2.micro",
+                        "VCpuInfo": {"DefaultVCpus": 2, "DefaultCores": 2},
+                        "NetworkInfo": {"EfaSupported": False},
+                    }
+                ),
+                "t3.micro": InstanceTypeInfo(
+                    {
+                        "InstanceType": "t3.micro",
+                        "VCpuInfo": {"DefaultVCpus": 2, "DefaultCores": 2},
+                        "NetworkInfo": {"EfaSupported": False},
+                    }
+                ),
+                "c5n.18xlarge": InstanceTypeInfo(
+                    {
+                        "InstanceType": "c5n.18xlarge",
+                        "VCpuInfo": {"DefaultVCpus": 2, "DefaultCores": 2},
+                        "NetworkInfo": {"EfaSupported": True},
+                    }
+                ),
+            },
+            False,
+            True,
+            "Instance types (t2.micro,t3.micro) in Compute Resource TestComputeResource do not support EFA.",
+        ),
+        # If EFA is NOT enabled and one or more instance types supports EFA, a WARNING message should be printed
+        (
+            {
+                "t2.micro": InstanceTypeInfo(
+                    {
+                        "InstanceType": "t2.micro",
+                        "VCpuInfo": {"DefaultVCpus": 2, "DefaultCores": 2},
+                        "NetworkInfo": {"EfaSupported": False},
+                    }
+                ),
+                "t3.micro": InstanceTypeInfo(
+                    {
+                        "InstanceType": "t3.micro",
+                        "VCpuInfo": {"DefaultVCpus": 2, "DefaultCores": 2},
+                        "NetworkInfo": {"EfaSupported": False},
+                    }
+                ),
+                "c5n.18xlarge": InstanceTypeInfo(
+                    {
+                        "InstanceType": "c5n.18xlarge",
+                        "VCpuInfo": {"DefaultVCpus": 2, "DefaultCores": 2},
+                        "NetworkInfo": {"EfaSupported": True},
+                    }
+                ),
+            },
+            False,
+            False,
+            "The EC2 instance type(s) selected (c5n.18xlarge) for the Compute Resource TestComputeResource support "
+            "enhanced networking capabilities using Elastic Fabric Adapter (EFA). EFA enables you to run applications "
+            "requiring high levels of inter-node communications at scale on AWS at no additional charge. You can "
+            "update the cluster's configuration to enable EFA ("
+            "https://docs.aws.amazon.com/parallelcluster/latest/ug/efa-v3.html).",
+        ),
     ],
 )
-def test_flexible_instance_types_validator(instance_types_info, disable_simultaneous_multithreading, expected_message):
+def test_flexible_instance_types_validator(
+    instance_types_info, disable_simultaneous_multithreading, efa_enabled, expected_message
+):
     actual_failures = FlexibleInstanceTypesValidator().execute(
-        "TestComputeResource", instance_types_info, disable_simultaneous_multithreading
+        "TestComputeResource", instance_types_info, disable_simultaneous_multithreading, efa_enabled
     )
     assert_failure_messages(actual_failures, expected_message)
 

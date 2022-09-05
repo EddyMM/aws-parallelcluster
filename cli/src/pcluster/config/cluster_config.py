@@ -1712,6 +1712,7 @@ class SlurmFlexibleComputeResource(_BaseSlurmComputeResource):
             compute_resource_name=self.name,
             instance_types_info=self.instance_type_info_map,
             disable_simultaneous_multithreading=self.disable_simultaneous_multithreading_manually,
+            efa_enabled=self.efa.enabled,
         )
         self._register_validator(FlexibleInstanceTypesValidator, **validator_args)
 

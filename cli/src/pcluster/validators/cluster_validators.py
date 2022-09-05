@@ -78,12 +78,14 @@ class FlexibleInstanceTypesValidator(Validator):
 
     def _validate(
         self,
-        compute_resource_name,
+        compute_resource_name: str,
         instance_types_info: Dict[str, InstanceTypeInfo],
-        disable_simultaneous_multithreading,
+        disable_simultaneous_multithreading: bool,
+        efa_enabled: bool,
     ):
         self.validate_cpu_requirements(compute_resource_name, instance_types_info, disable_simultaneous_multithreading)
         self.validate_accelerator_requirements(compute_resource_name, instance_types_info)
+        self.validate_efa_requirements(compute_resource_name, instance_types_info, efa_enabled)
 
     def validate_size(self, items, size, failure_message, failure_level):
         """Check if a list of items has a specific size and add a failure entry if it's exceeded."""
@@ -178,6 +180,63 @@ class FlexibleInstanceTypesValidator(Validator):
         """
         self.validate_accelerator_count(compute_resource_name, instance_types_info)
         self.validate_accelerator_manufactures(compute_resource_name, instance_types_info)
+
+    def validate_efa_requirements(
+        self,
+        compute_resource_name: str,
+        instance_types_info: Dict[str, InstanceTypeInfo],
+        efa_enabled: bool,
+    ):
+        """Check if the instance types have a uniform support for EFA.
+
+        Validation Failure is expected if EFA is ENABLED and at least one instance type defined in the compute resource
+        DOES NOT support EFA.
+        """
+        if efa_enabled:
+            all_instance_types = set(instance_types_info.keys())
+            instance_types_without_efa_support = {
+                instance_type_name
+                for instance_type_name, instance_type_info in instance_types_info.items()
+                if not instance_type_info.is_efa_supported()
+            }
+
+            # If all the instance types have EFA support, `instance_types_without_efa_support` should be empty
+            # --> No failure expected
+            # If all the instance types DO NOT have EFA support, `instance_types_without_efa_support` should be the same
+            # as `all_instance_types` (Set difference of 0) --> No failure expected
+            # If there is a mixed support for EFA, `instance_types_without_efa_support` & `all_instance_types`
+            # will have different instance types (Set difference greater than 0) --> Validation Failure expected and
+            # a message with the instance types that DO NOT support EFA is included
+            if len(all_instance_types - instance_types_without_efa_support) > 0:
+                self._add_failure(
+                    (
+                        "Instance types ({0}) in Compute Resource {1} do not support EFA.".format(
+                            ",".join(sorted(instance_types_without_efa_support)),
+                            compute_resource_name,
+                        )
+                    ),
+                    FailureLevel.ERROR,
+                )
+        else:
+            instance_types_with_efa_support = {
+                instance_type_name
+                for instance_type_name, instance_type_info in instance_types_info.items()
+                if instance_type_info.is_efa_supported()
+            }
+            if instance_types_with_efa_support:
+                self._add_failure(
+                    (
+                        "The EC2 instance type(s) selected ({0}) for the Compute Resource {1} support enhanced "
+                        "networking capabilities using Elastic Fabric Adapter (EFA). EFA enables you to run "
+                        "applications requiring high levels of inter-node communications at scale on AWS at no "
+                        "additional charge. You can update the cluster's configuration to enable EFA ("
+                        "https://docs.aws.amazon.com/parallelcluster/latest/ug/efa-v3.html).".format(
+                            ",".join(sorted(instance_types_with_efa_support)),
+                            compute_resource_name,
+                        )
+                    ),
+                    FailureLevel.WARNING,
+                )
 
 
 class ClusterNameValidator(Validator):
