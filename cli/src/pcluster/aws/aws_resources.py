@@ -183,6 +183,36 @@ class InstanceTypeInfo:
 
         return gpu_count
 
+    def gpu_manufacturers(self):
+        """Return the list of GPU manufacturers supported by this instance type."""
+        gpu_info = self.instance_type_data.get("GpuInfo", None)
+
+        if gpu_info:
+            return list({gpu.get("Manufacturer") for gpu in gpu_info.get("Gpus", [])})
+        return []
+
+    def inference_accelerator_names(self):
+        """Return the list of Inference Accelerator Manufacturers supported by this instance type."""
+        inference_accelerator_info = self.instance_type_data.get("InferenceAcceleratorInfo", None)
+
+        if inference_accelerator_info:
+            return list({accelerator.get("Name") for accelerator in inference_accelerator_info.get("Accelerators", [])})
+        return []
+
+    def inference_accelerator_count(self):
+        """Return the total number of Inference Accelerators associated with this instance type."""
+        inference_accelerator_info = self.instance_type_data.get("InferenceAcceleratorInfo", None)
+
+        accelerator_count = 0
+        if inference_accelerator_info:
+            for accelerator in inference_accelerator_info.get("Accelerators", []):
+                accelerator_name = accelerator.get("Name", "")
+                if accelerator_name.lower() == "inferentia":
+                    accelerator_count += accelerator.get("Count", 0)
+                else:
+                    LOGGER.warning("ParallelCluster currently does not support %s accelerators.", accelerator_name)
+        return accelerator_count
+
     def max_network_interface_count(self) -> int:
         """Max number of NICs for the instance."""
         return int(self.instance_type_data.get("NetworkInfo").get("MaximumNetworkCards", 1))

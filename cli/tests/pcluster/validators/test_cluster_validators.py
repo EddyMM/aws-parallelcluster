@@ -225,6 +225,138 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
             "Instance types listed under Compute Resource TestComputeResource must have the same number of CPU "
             "cores when Simultaneous Multithreading is disabled.",
         ),
+        # Instance Types should have the same number of GPUs
+        (
+            "TestQueue",
+            "TestComputeResource",
+            {
+                "g4dn.xlarge": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2},
+                        "GpuInfo": {
+                            "Gpus": [
+                                {"Name": "T4", "Manufacturer": "NVIDIA", "Count": 1, "MemoryInfo": {"SizeInMiB": 16384}}
+                            ],
+                            "TotalGpuMemoryInMiB": 16384,
+                        },
+                    }
+                ),
+                "g5.xlarge": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2},
+                        "GpuInfo": {
+                            "Gpus": [
+                                {
+                                    "Name": "A10G",
+                                    "Manufacturer": "NVIDIA",
+                                    "Count": 2,
+                                    "MemoryInfo": {"SizeInMiB": 24576},
+                                }
+                            ],
+                            "TotalGpuMemoryInMiB": 24576,
+                        },
+                    }
+                ),
+            },
+            False,
+            False,
+            False,
+            "Instance types listed under Compute Resource TestComputeResource must have the same number of GPUs.",
+        ),
+        # Instance Types should have the same number of Accelerators
+        (
+            "TestQueue",
+            "TestComputeResource",
+            {
+                "inf1.6xlarge": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 24, "DefaultCores": 12},
+                        "InferenceAcceleratorInfo": {
+                            "Accelerators": [{"Count": 4, "Name": "Inferentia", "Manufacturer": "AWS"}]
+                        },
+                    }
+                ),
+                "inf1.2xlarge": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 24, "DefaultCores": 12},
+                        "InferenceAcceleratorInfo": {
+                            "Accelerators": [{"Count": 1, "Name": "Inferentia", "Manufacturer": "AWS"}]
+                        },
+                    }
+                ),
+            },
+            False,
+            False,
+            False,
+            "Instance types listed under Compute Resource TestComputeResource must have the same number of Inference "
+            "Accelerators.",
+        ),
+        # Instance Types should have the same GPU manufacturer
+        (
+            "TestQueue",
+            "TestComputeResource",
+            {
+                "g4dn.xlarge": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2},
+                        "GpuInfo": {
+                            "Gpus": [
+                                {"Name": "T4", "Manufacturer": "NVIDIA", "Count": 2, "MemoryInfo": {"SizeInMiB": 16384}}
+                            ],
+                            "TotalGpuMemoryInMiB": 16384,
+                        },
+                    }
+                ),
+                "g5.xlarge": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2},
+                        "GpuInfo": {
+                            "Gpus": [
+                                {
+                                    "Name": "A10G",
+                                    "Manufacturer": "OtherGPUManufacturers",
+                                    "Count": 2,
+                                    "MemoryInfo": {"SizeInMiB": 24576},
+                                }
+                            ],
+                            "TotalGpuMemoryInMiB": 24576,
+                        },
+                    }
+                ),
+            },
+            False,
+            False,
+            False,
+            "Instance types listed under Compute Resource TestComputeResource must have the same GPU manufacturer.",
+        ),
+        # Instance Types should have the same Accelerator Name (Inferentia)
+        (
+            "TestQueue",
+            "TestComputeResource",
+            {
+                "inf1.6xlarge": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 24, "DefaultCores": 12},
+                        "InferenceAcceleratorInfo": {
+                            "Accelerators": [{"Count": 4, "Name": "Inferentia", "Manufacturer": "AWS"}]
+                        },
+                    }
+                ),
+                "inf1.2xlarge": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 24, "DefaultCores": 12},
+                        "InferenceAcceleratorInfo": {
+                            "Accelerators": [{"Count": 4, "Name": "AnotherName", "Manufacturer": "AWS"}]
+                        },
+                    }
+                ),
+            },
+            False,
+            False,
+            False,
+            "Instance types listed under Compute Resource TestComputeResource must have the same inference "
+            "accelerator manufacturer",
+        ),
     ],
 )
 def test_flexible_instance_types_validator(
