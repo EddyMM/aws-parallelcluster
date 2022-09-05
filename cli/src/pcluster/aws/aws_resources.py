@@ -201,6 +201,16 @@ class InstanceTypeInfo:
 
         return vcpus
 
+    def cores_count(self) -> int:
+        """Get number of cores for the given instance type."""
+        try:
+            vcpus_info = self.instance_type_data.get("VCpuInfo")
+            cores = vcpus_info.get("DefaultCores")
+        except KeyError:
+            cores = -1
+
+        return cores
+
     def instance_storage_supported(self) -> bool:
         """Indicate whether instance storage is supported."""
         return self.instance_type_data.get("InstanceStorageSupported")

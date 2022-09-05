@@ -28,6 +28,7 @@ from pcluster.validators.cluster_validators import (
     EfaSecurityGroupValidator,
     EfaValidator,
     ExistingFsxNetworkingValidator,
+    FlexibleInstanceTypesValidator,
     FsxArchitectureOsValidator,
     HeadNodeImdsValidator,
     HostedZoneValidator,
@@ -187,6 +188,62 @@ def test_max_count_validator(resource_name, resources_length, max_length, expect
 )
 def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_type, expected_message):
     actual_failures = SchedulableMemoryValidator().execute(schedulable_memory, ec2memory, instance_type)
+    assert_failure_messages(actual_failures, expected_message)
+
+
+# ---------------- Flexible Instance Types validators ---------------- #
+
+
+@pytest.mark.parametrize(
+    "queue_name, compute_resource_name, instance_types_info, disable_simultaneous_multithreading, efa_enabled, "
+    "placement_group_enabled, expected_message",
+    [
+        # Instance Types should have the same number of CPUs
+        (
+            "TestQueue",
+            "TestComputeResource",
+            {
+                "t2.micro": InstanceTypeInfo({"VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2}}),
+                "t3.micro": InstanceTypeInfo({"VCpuInfo": {"DefaultVCpus": 5, "DefaultCores": 2}}),
+            },
+            False,
+            False,
+            False,
+            "Instance types listed under Compute Resource TestComputeResource must have the same number of vCPUs.",
+        ),
+        # InstanceTypes should have the same number of cores if simultaneous multithreading is disabled
+        (
+            "TestQueue",
+            "TestComputeResource",
+            {
+                "t2.micro": InstanceTypeInfo({"VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 4}}),
+                "t3.micro": InstanceTypeInfo({"VCpuInfo": {"DefaultVCpus": 5, "DefaultCores": 2}}),
+            },
+            True,
+            False,
+            False,
+            "Instance types listed under Compute Resource TestComputeResource must have the same number of CPU "
+            "cores when Simultaneous Multithreading is disabled.",
+        ),
+    ],
+)
+def test_flexible_instance_types_validator(
+    queue_name,
+    compute_resource_name,
+    instance_types_info,
+    disable_simultaneous_multithreading,
+    efa_enabled,
+    placement_group_enabled,
+    expected_message,
+):
+    actual_failures = FlexibleInstanceTypesValidator().execute(
+        queue_name,
+        compute_resource_name,
+        instance_types_info,
+        disable_simultaneous_multithreading,
+        efa_enabled,
+        placement_group_enabled,
+    )
     assert_failure_messages(actual_failures, expected_message)
 
 

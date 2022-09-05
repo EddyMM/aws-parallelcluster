@@ -13,7 +13,7 @@ import re
 from collections import defaultdict
 from enum import Enum
 from itertools import combinations, product
-from typing import List
+from typing import Dict, List
 
 from pcluster.aws.aws_api import AWSApi
 from pcluster.aws.aws_resources import InstanceTypeInfo
@@ -71,6 +71,54 @@ HOST_NAME_MAX_LENGTH = 64
 # Max fqdn size is 255 characters, the first 64 are used for the hostname (e.g. queuename-st|dy-computeresourcename-N),
 # then we need to add an extra ., so we have 190 characters to be used for the clustername + domain-name.
 CLUSTER_NAME_AND_CUSTOM_DOMAIN_NAME_MAX_LENGTH = 255 - HOST_NAME_MAX_LENGTH - 1
+
+
+class FlexibleInstanceTypesValidator(Validator):
+    """Validator for Compute Resources that has multiple instance types."""
+
+    def _validate(
+        self,
+        queue_name: str,
+        compute_resource_name: str,
+        instance_types_info: Dict[str, InstanceTypeInfo],
+        disable_simultaneous_multithreading: bool,
+        efa_enabled: bool,
+        placement_group_enabled: bool,
+    ):
+        self.validate_cpu_requirements(compute_resource_name, instance_types_info, disable_simultaneous_multithreading)
+
+    def validate_size(self, items, size, failure_message, failure_level):
+        """Check if a list of items has a specific size and add a failure entry if it's exceeded."""
+        if len(items) > size:
+            self._add_failure(failure_message, failure_level)
+
+    def validate_cpu_requirements(
+        self,
+        compute_resource_name: str,
+        instance_types_info: Dict[str, InstanceTypeInfo],
+        disable_simultaneous_multithreading: bool,
+    ):
+        """Confirm CPU requirements for Flexible Instance Types.
+
+        Instance types should have the same number of CPUs or same number of Cores if Simultaneous Multithreading
+        is disabled.
+        """
+        if disable_simultaneous_multithreading:
+            self.validate_size(
+                {instance_type_info.cores_count() for instance_type_info in instance_types_info.values()},
+                1,
+                f"Instance types listed under Compute Resource {compute_resource_name} must have the same number of "
+                f"CPU cores when Simultaneous Multithreading is disabled.",
+                FailureLevel.ERROR,
+            )
+        else:
+            self.validate_size(
+                {instance_type_info.vcpus_count() for instance_type_info in instance_types_info.values()},
+                1,
+                f"Instance types listed under Compute Resource {compute_resource_name} must have the same number of "
+                f"vCPUs.",
+                FailureLevel.ERROR,
+            )
 
 
 class ClusterNameValidator(Validator):
