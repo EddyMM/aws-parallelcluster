@@ -1807,6 +1807,13 @@ class _CommonQueue(BaseQueue):
             return None
 
 
+class AllocationStrategy(Enum):
+    """Define supported allocation strategies."""
+
+    LOWEST_PRICE = "lowest-price"
+    CAPACITY_OPTIMIZED = "capacity-optimized"
+
+
 class SlurmQueue(_CommonQueue):
     """Represents a Slurm Queue that has Compute Resources with both Single and Multiple Instance Types."""
 
@@ -1814,14 +1821,18 @@ class SlurmQueue(_CommonQueue):
         self,
         compute_resources: List[_BaseSlurmComputeResource],
         networking: SlurmQueueNetworking,
-        allocation_strategy: str = "lowest-price",
+        allocation_strategy: str = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.compute_resources = compute_resources
         self.networking = networking
         if any(isinstance(compute_resource, SlurmFlexibleComputeResource) for compute_resource in compute_resources):
-            self.allocation_strategy = allocation_strategy
+            self.allocation_strategy = (
+                AllocationStrategy[allocation_strategy.replace("-", "_").upper()]
+                if allocation_strategy
+                else AllocationStrategy.LOWEST_PRICE
+            )
 
     @property
     def instance_type_list(self):
@@ -1868,6 +1879,8 @@ class SlurmQueue(_CommonQueue):
             if isinstance(compute_resource, SlurmFlexibleComputeResource):
                 validator_args = dict(
                     queue_name=self.name,
+                    capacity_type=self.capacity_type,
+                    allocation_strategy=self.allocation_strategy,
                     compute_resource_name=compute_resource.name,
                     instance_types_info=compute_resource.instance_type_info_map,
                     disable_simultaneous_multithreading=compute_resource.disable_simultaneous_multithreading,

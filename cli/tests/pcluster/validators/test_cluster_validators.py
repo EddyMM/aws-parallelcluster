@@ -13,7 +13,7 @@ from assertpy import assert_that
 from munch import DefaultMunch
 
 from pcluster.aws.aws_resources import InstanceTypeInfo
-from pcluster.config.cluster_config import PlacementGroup, Tag
+from pcluster.config.cluster_config import AllocationStrategy, CapacityType, PlacementGroup, Tag
 from pcluster.constants import PCLUSTER_NAME_MAX_LENGTH
 from pcluster.validators.cluster_validators import (
     FSX_MESSAGES,
@@ -195,12 +195,14 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
 
 
 @pytest.mark.parametrize(
-    "queue_name, compute_resource_name, instance_types_info, disable_simultaneous_multithreading, efa_enabled, "
-    "placement_group_enabled, expected_message",
+    "queue_name, capacity_type, allocation_strategy, compute_resource_name, instance_types_info, "
+    "disable_simultaneous_multithreading, efa_enabled, placement_group_enabled, expected_message",
     [
         # Instance Types should have the same number of CPUs
         (
             "TestQueue",
+            CapacityType.ONDEMAND,
+            AllocationStrategy.LOWEST_PRICE,
             "TestComputeResource",
             {
                 "t2.micro": InstanceTypeInfo({"VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2}}),
@@ -214,6 +216,8 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
         # InstanceTypes should have the same number of cores if simultaneous multithreading is disabled
         (
             "TestQueue",
+            CapacityType.ONDEMAND,
+            AllocationStrategy.LOWEST_PRICE,
             "TestComputeResource",
             {
                 "t2.micro": InstanceTypeInfo({"VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 4}}),
@@ -228,6 +232,8 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
         # Instance Types should have the same number of GPUs
         (
             "TestQueue",
+            CapacityType.ONDEMAND,
+            AllocationStrategy.LOWEST_PRICE,
             "TestComputeResource",
             {
                 "g4dn.xlarge": InstanceTypeInfo(
@@ -266,6 +272,8 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
         # Instance Types should have the same number of Accelerators
         (
             "TestQueue",
+            CapacityType.ONDEMAND,
+            AllocationStrategy.LOWEST_PRICE,
             "TestComputeResource",
             {
                 "inf1.6xlarge": InstanceTypeInfo(
@@ -294,6 +302,8 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
         # Instance Types should have the same GPU manufacturer
         (
             "TestQueue",
+            CapacityType.ONDEMAND,
+            AllocationStrategy.LOWEST_PRICE,
             "TestComputeResource",
             {
                 "g4dn.xlarge": InstanceTypeInfo(
@@ -332,6 +342,8 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
         # Instance Types should have the same Accelerator Name (Inferentia)
         (
             "TestQueue",
+            CapacityType.ONDEMAND,
+            AllocationStrategy.LOWEST_PRICE,
             "TestComputeResource",
             {
                 "inf1.6xlarge": InstanceTypeInfo(
@@ -360,6 +372,8 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
         # Instance Types should have the same EFA support status if EFA is enabled
         (
             "TestQueue",
+            CapacityType.ONDEMAND,
+            AllocationStrategy.LOWEST_PRICE,
             "TestComputeResource",
             {
                 "t2.micro": InstanceTypeInfo(
@@ -388,6 +402,8 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
         ),
         (
             "TestQueue",
+            CapacityType.ONDEMAND,
+            AllocationStrategy.LOWEST_PRICE,
             "TestComputeResource",
             {
                 "c5n.9xlarge": InstanceTypeInfo(
@@ -411,6 +427,8 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
         # If EFA is NOT enabled and one or more instance types supports EFA, a WARNING message should be printed
         (
             "TestQueue",
+            CapacityType.ONDEMAND,
+            AllocationStrategy.LOWEST_PRICE,
             "TestComputeResource",
             {
                 "t2.micro": InstanceTypeInfo(
@@ -444,6 +462,8 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
         # Instance Types with varying Maximum NICs will have the smallest one used when setting the launch template
         (
             "TestQueue",
+            CapacityType.ONDEMAND,
+            AllocationStrategy.LOWEST_PRICE,
             "TestComputeResource",
             {
                 "t2.micro": InstanceTypeInfo(
@@ -469,6 +489,8 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
         # getting an Insufficient Capacity Error
         (
             "TestQueue",
+            CapacityType.ONDEMAND,
+            AllocationStrategy.LOWEST_PRICE,
             "TestComputeResource",
             {},
             False,
@@ -478,10 +500,26 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
             "use of multiple instance types for Compute Resource: TestComputeResource ("
             "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/placement-groups.html#placement-groups-cluster).",
         ),
+        # OnDemand Capacity type only supports "lowest-price" allocation strategy
+        # Spot Capacity type supports both "lowest-price" and "capacity-optimized" allocation strategy
+        (
+            "TestQueue",
+            CapacityType.ONDEMAND,
+            AllocationStrategy.CAPACITY_OPTIMIZED,
+            "TestComputeResource",
+            {},
+            False,
+            False,
+            False,
+            "Compute Resource TestComputeResource is using an OnDemand CapacityType. OnDemand CapacityType can only "
+            "use 'lowest-price' allocation strategy.",
+        ),
     ],
 )
 def test_flexible_instance_types_validator(
     queue_name,
+    capacity_type,
+    allocation_strategy,
     compute_resource_name,
     instance_types_info,
     disable_simultaneous_multithreading,
@@ -491,6 +529,8 @@ def test_flexible_instance_types_validator(
 ):
     actual_failures = FlexibleInstanceTypesValidator().execute(
         queue_name,
+        capacity_type,
+        allocation_strategy,
         compute_resource_name,
         instance_types_info,
         disable_simultaneous_multithreading,
