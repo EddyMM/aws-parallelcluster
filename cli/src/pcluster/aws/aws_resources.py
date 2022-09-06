@@ -164,7 +164,6 @@ class InstanceTypeInfo:
 
     def gpu_count(self):
         """Return the number of GPUs for the instance."""
-        # FixMe: this method is not used in the pcluster3 CLI
         gpu_info = self.instance_type_data.get("GpuInfo", None)
 
         gpu_count = 0
@@ -215,7 +214,7 @@ class InstanceTypeInfo:
 
     def max_network_interface_count(self) -> int:
         """Max number of NICs for the instance."""
-        return int(self.instance_type_data.get("NetworkInfo").get("MaximumNetworkCards", 1))
+        return int(self.instance_type_data.get("NetworkInfo", {}).get("MaximumNetworkCards", 1))
 
     def default_threads_per_core(self):
         """Return the default threads per core for the given instance type."""
@@ -253,7 +252,7 @@ class InstanceTypeInfo:
 
     def is_efa_supported(self):
         """Check whether EFA is supported."""
-        return self.instance_type_data.get("NetworkInfo").get("EfaSupported")
+        return self.instance_type_data.get("NetworkInfo", {}).get("EfaSupported")
 
     def instance_type(self):
         """Get the instance type."""
