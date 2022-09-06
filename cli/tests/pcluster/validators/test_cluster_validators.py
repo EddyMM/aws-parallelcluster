@@ -357,6 +357,90 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
             "Instance types listed under Compute Resource TestComputeResource must have the same inference "
             "accelerator manufacturer",
         ),
+        # Instance Types should have the same EFA support status if EFA is enabled
+        (
+            "TestQueue",
+            "TestComputeResource",
+            {
+                "t2.micro": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 2, "DefaultCores": 2},
+                        "NetworkInfo": {"EfaSupported": False},
+                    }
+                ),
+                "t3.micro": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 2, "DefaultCores": 2},
+                        "NetworkInfo": {"EfaSupported": False},
+                    }
+                ),
+                "c5n.18xlarge": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 2, "DefaultCores": 2},
+                        "NetworkInfo": {"EfaSupported": True},
+                    }
+                ),
+            },
+            False,
+            True,
+            False,
+            "Instance types (t2.micro,t3.micro) in Compute Resource TestComputeResource do not support EFA.",
+        ),
+        (
+            "TestQueue",
+            "TestComputeResource",
+            {
+                "c5n.9xlarge": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 2, "DefaultCores": 2},
+                        "NetworkInfo": {"EfaSupported": True},
+                    }
+                ),
+                "c5n.18xlarge": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 2, "DefaultCores": 2},
+                        "NetworkInfo": {"EfaSupported": True},
+                    }
+                ),
+            },
+            False,
+            True,
+            False,
+            "",
+        ),
+        # If EFA is NOT enabled and one or more instance types supports EFA, a WARNING message should be printed
+        (
+            "TestQueue",
+            "TestComputeResource",
+            {
+                "t2.micro": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 2, "DefaultCores": 2},
+                        "NetworkInfo": {"EfaSupported": False},
+                    }
+                ),
+                "t3.micro": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 2, "DefaultCores": 2},
+                        "NetworkInfo": {"EfaSupported": False},
+                    }
+                ),
+                "c5n.18xlarge": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 2, "DefaultCores": 2},
+                        "NetworkInfo": {"EfaSupported": True},
+                    }
+                ),
+            },
+            False,
+            False,
+            False,
+            "The EC2 instance type(s) selected (c5n.18xlarge) for the Compute Resource TestComputeResource support "
+            "enhanced networking capabilities using Elastic Fabric Adapter (EFA). EFA enables you to run applications "
+            "requiring high levels of inter-node communications at scale on AWS at no additional charge. You can "
+            "update the cluster's configuration to enable EFA ("
+            "https://docs.aws.amazon.com/parallelcluster/latest/ug/efa-v3.html).",
+        ),
     ],
 )
 def test_flexible_instance_types_validator(
