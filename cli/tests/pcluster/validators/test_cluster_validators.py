@@ -441,6 +441,43 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
             "update the cluster's configuration to enable EFA ("
             "https://docs.aws.amazon.com/parallelcluster/latest/ug/efa-v3.html).",
         ),
+        # Instance Types with varying Maximum NICs will have the smallest one used when setting the launch template
+        (
+            "TestQueue",
+            "TestComputeResource",
+            {
+                "t2.micro": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2},
+                        "NetworkInfo": {"MaximumNetworkCards": 4},
+                    }
+                ),
+                "t3.micro": InstanceTypeInfo(
+                    {
+                        "VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2},
+                        "NetworkInfo": {"MaximumNetworkCards": 2},
+                    }
+                ),
+            },
+            False,
+            False,
+            False,
+            "Compute Resource TestComputeResource has instance types with varying numbers of network cards (Min: 2, "
+            "Max: 4). Compute Resource will be created with 2 network cards.",
+        ),
+        # Using a placement group while having compute resources with multiple instance types increases the chances of
+        # getting an Insufficient Capacity Error
+        (
+            "TestQueue",
+            "TestComputeResource",
+            {},
+            False,
+            False,
+            True,
+            "Enabling placement groups for queue: TestQueue may result in Insufficient Capacity Errors due to the "
+            "use of multiple instance types for Compute Resource: TestComputeResource ("
+            "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/placement-groups.html#placement-groups-cluster).",
+        ),
     ],
 )
 def test_flexible_instance_types_validator(

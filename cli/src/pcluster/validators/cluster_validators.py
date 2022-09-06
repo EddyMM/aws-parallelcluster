@@ -88,6 +88,9 @@ class FlexibleInstanceTypesValidator(Validator):
         self.validate_cpu_requirements(compute_resource_name, instance_types_info, disable_simultaneous_multithreading)
         self.validate_accelerator_requirements(compute_resource_name, instance_types_info)
         self.validate_efa_requirements(compute_resource_name, instance_types_info, efa_enabled)
+        self.validate_networking_requirements(
+            queue_name, compute_resource_name, instance_types_info, placement_group_enabled
+        )
 
     def validate_size(self, items, size, failure_message, failure_level):
         """Check if a list of items has a specific size and add a failure entry if it's exceeded."""
@@ -239,6 +242,41 @@ class FlexibleInstanceTypesValidator(Validator):
                     ),
                     FailureLevel.WARNING,
                 )
+
+    def validate_networking_requirements(
+        self,
+        queue_name: str,
+        compute_resource_name: str,
+        instance_types_info: Dict[str, InstanceTypeInfo],
+        placement_group_enabled: bool,
+    ):
+        """Validate that the lowest value for the MaximumNetworkInterfaceCards among the Instance Types is used.
+
+        Each instance type has a maximum number of Network Interface Cards. When the instance types in the  list
+        have a varying number of 'maximum network interface cards', the smallest one is used  in the  launch template
+        """
+        unique_maximum_nic_counts = {
+            instance_type_info.max_network_interface_count()
+            for instance_type_name, instance_type_info in instance_types_info.items()
+        }
+
+        if len(unique_maximum_nic_counts) > 1:
+            lowest_nic_count = min(unique_maximum_nic_counts)
+            highest_nic_count = max(unique_maximum_nic_counts)
+            self._add_failure(
+                f"Compute Resource {compute_resource_name} has instance types with varying numbers of network cards ("
+                f"Min: {lowest_nic_count}, Max: {highest_nic_count}). Compute Resource will be created with "
+                f"{lowest_nic_count} network cards.",
+                FailureLevel.WARNING,
+            )
+
+        if placement_group_enabled:
+            self._add_failure(
+                f"Enabling placement groups for queue: {queue_name} may result in Insufficient Capacity Errors due to "
+                f"the use of multiple instance types for Compute Resource: {compute_resource_name} ("
+                f"https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/placement-groups.html#placement-groups-cluster).",
+                FailureLevel.WARNING,
+            )
 
 
 class ClusterNameValidator(Validator):
