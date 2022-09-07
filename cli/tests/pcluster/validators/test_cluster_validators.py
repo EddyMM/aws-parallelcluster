@@ -196,7 +196,8 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
 
 @pytest.mark.parametrize(
     "queue_name, capacity_type, allocation_strategy, compute_resource_name, instance_types_info, "
-    "disable_simultaneous_multithreading, efa_enabled, placement_group_enabled, expected_message",
+    "disable_simultaneous_multithreading, efa_enabled, placement_group_enabled, memory_scheduling_enabled, "
+    "expected_message",
     [
         # Instance Types should have the same number of CPUs
         (
@@ -208,6 +209,7 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
                 "t2.micro": InstanceTypeInfo({"VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2}}),
                 "t3.micro": InstanceTypeInfo({"VCpuInfo": {"DefaultVCpus": 5, "DefaultCores": 2}}),
             },
+            False,
             False,
             False,
             False,
@@ -224,6 +226,7 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
                 "t3.micro": InstanceTypeInfo({"VCpuInfo": {"DefaultVCpus": 5, "DefaultCores": 2}}),
             },
             True,
+            False,
             False,
             False,
             "Instance types listed under Compute Resource TestComputeResource must have the same number of CPU "
@@ -267,6 +270,7 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
             False,
             False,
             False,
+            False,
             "Instance types listed under Compute Resource TestComputeResource must have the same number of GPUs.",
         ),
         # Instance Types should have the same number of Accelerators
@@ -293,6 +297,7 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
                     }
                 ),
             },
+            False,
             False,
             False,
             False,
@@ -337,6 +342,7 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
             False,
             False,
             False,
+            False,
             "Instance types listed under Compute Resource TestComputeResource must have the same GPU manufacturer.",
         ),
         # Instance Types should have the same Accelerator Name (Inferentia)
@@ -363,6 +369,7 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
                     }
                 ),
             },
+            False,
             False,
             False,
             False,
@@ -398,6 +405,7 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
             False,
             True,
             False,
+            False,
             "Instance types (t2.micro,t3.micro) in Compute Resource TestComputeResource do not support EFA.",
         ),
         (
@@ -421,6 +429,7 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
             },
             False,
             True,
+            False,
             False,
             "",
         ),
@@ -453,6 +462,7 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
             False,
             False,
             False,
+            False,
             "The EC2 instance type(s) selected (c5n.18xlarge) for the Compute Resource TestComputeResource support "
             "enhanced networking capabilities using Elastic Fabric Adapter (EFA). EFA enables you to run applications "
             "requiring high levels of inter-node communications at scale on AWS at no additional charge. You can "
@@ -482,6 +492,7 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
             False,
             False,
             False,
+            False,
             "Compute Resource TestComputeResource has instance types with varying numbers of network cards (Min: 2, "
             "Max: 4). Compute Resource will be created with 2 network cards.",
         ),
@@ -496,6 +507,7 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
             False,
             False,
             True,
+            False,
             "Enabling placement groups for queue: TestQueue may result in Insufficient Capacity Errors due to the "
             "use of multiple instance types for Compute Resource: TestComputeResource ("
             "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/placement-groups.html#placement-groups-cluster).",
@@ -511,8 +523,28 @@ def test_schedulable_memory_validator(schedulable_memory, ec2memory, instance_ty
             False,
             False,
             False,
+            False,
             "Compute Resource TestComputeResource is using an OnDemand CapacityType. OnDemand CapacityType can only "
             "use 'lowest-price' allocation strategy.",
+        ),
+        # Memory-based scheduling is supported for Compute Resource that use either 'InstanceType' or have a sinlge
+        # instance type under 'InstanceTypeList'
+        (
+            "TestQueue",
+            CapacityType.ONDEMAND,
+            AllocationStrategy.LOWEST_PRICE,
+            "TestComputeResource",
+            {
+                "t2.micro": InstanceTypeInfo({"VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2}}),
+                "t3.micro": InstanceTypeInfo({"VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2}}),
+            },
+            False,
+            False,
+            False,
+            True,
+            "Memory-based scheduling is only supported for Compute Resources using either 'InstanceType' or "
+            "'InstanceTypeList' with one instance type. Compute Resource TestComputeResource has more than one "
+            "instance type specified."
         ),
     ],
 )
@@ -525,6 +557,7 @@ def test_flexible_instance_types_validator(
     disable_simultaneous_multithreading,
     efa_enabled,
     placement_group_enabled,
+    memory_scheduling_enabled,
     expected_message,
 ):
     actual_failures = FlexibleInstanceTypesValidator().execute(
@@ -536,6 +569,7 @@ def test_flexible_instance_types_validator(
         disable_simultaneous_multithreading,
         efa_enabled,
         placement_group_enabled,
+        memory_scheduling_enabled,
     )
     assert_failure_messages(actual_failures, expected_message)
 

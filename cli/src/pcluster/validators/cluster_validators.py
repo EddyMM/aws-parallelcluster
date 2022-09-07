@@ -86,6 +86,7 @@ class FlexibleInstanceTypesValidator(Validator):
         disable_simultaneous_multithreading: bool,
         efa_enabled: bool,
         placement_group_enabled: bool,
+        memory_scheduling_enabled: bool
     ):
         self.validate_cpu_requirements(compute_resource_name, instance_types_info, disable_simultaneous_multithreading)
         self.validate_accelerator_requirements(compute_resource_name, instance_types_info)
@@ -94,6 +95,9 @@ class FlexibleInstanceTypesValidator(Validator):
             queue_name, compute_resource_name, instance_types_info, placement_group_enabled
         )
         self.validate_allocation_strategy(compute_resource_name, capacity_type, allocation_strategy)
+        self.validate_memory_scheduling_requirements(
+            compute_resource_name, instance_types_info, memory_scheduling_enabled
+        )
 
     def validate_size(self, items, size, failure_message, failure_level):
         """Check if a list of items has a specific size and add a failure entry if it's exceeded."""
@@ -290,6 +294,20 @@ class FlexibleInstanceTypesValidator(Validator):
             self._add_failure(
                 f"Compute Resource {compute_resource_name} is using an OnDemand CapacityType. OnDemand CapacityType "
                 "can only use 'lowest-price' allocation strategy.",
+                FailureLevel.ERROR,
+            )
+
+    def validate_memory_scheduling_requirements(
+        self,
+        compute_resource_name: str,
+        instance_types_info: Dict[str, InstanceTypeInfo],
+        memory_scheduling_enabled: bool
+    ):
+        if memory_scheduling_enabled and len(instance_types_info.items()) > 1:
+            self._add_failure(
+                "Memory-based scheduling is only supported for Compute Resources using either 'InstanceType' or "
+                f"'InstanceTypeList' with one instance type. Compute Resource {compute_resource_name} has more than "
+                "one instance type specified.",
                 FailureLevel.ERROR,
             )
 

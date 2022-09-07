@@ -1886,6 +1886,7 @@ class SlurmQueue(_CommonQueue):
                     disable_simultaneous_multithreading=compute_resource.disable_simultaneous_multithreading,
                     efa_enabled=compute_resource.efa,
                     placement_group_enabled=self.networking.placement_group and self.networking.placement_group.enabled,
+                    memory_scheduling_enabled=False,  # Raise registration to Scheduling Settings level
                 )
                 self._register_validator(FlexibleInstanceTypesValidator, **validator_args)
 
