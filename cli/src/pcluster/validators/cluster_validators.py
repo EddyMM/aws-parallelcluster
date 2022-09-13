@@ -10,6 +10,7 @@
 # limitations under the License.
 import math
 import re
+from abc import ABC
 from collections import defaultdict
 from enum import Enum
 from itertools import combinations, product
@@ -1153,13 +1154,27 @@ class SchedulerValidator(Validator):
             )
 
 
-class InstanceTypesListCPUValidator(Validator):
-    """Confirm CPU requirements for Flexible Instance Types."""
+class _FlexibleInstanceTypesValidator(Validator, ABC):
+    # pylint: disable=B024
+    def validate_property_homogeneity(
+        self,
+        instance_type_info_list: List[InstanceTypeInfo],
+        property_callback: Callable,
+        failure_message: str,
+        failure_level: FailureLevel,
+    ):
+        """Check if the instance_types have the same property (CPU count, GPU count etc)."""
+        property_count = None
+        for instance_type_info in instance_type_info_list:
+            current_property_count = property_callback(instance_type_info)
+            if property_count is not None and property_count != current_property_count:
+                self._add_failure(failure_message, failure_level)
+                break
+            property_count = current_property_count
 
-    def validate_size(self, items, size, failure_message, failure_level):
-        """Check if a list of items has a specific size and add a failure entry if it's exceeded."""
-        if len(items) > size:
-            self._add_failure(failure_message, failure_level)
+
+class InstanceTypesListCPUValidator(_FlexibleInstanceTypesValidator):
+    """Confirm CPU requirements for Flexible Instance Types."""
 
     def validate_property_homogeneity(
         self,
@@ -1204,3 +1219,48 @@ class InstanceTypesListCPUValidator(Validator):
                 "same number of vCPUs.",
                 failure_level=FailureLevel.ERROR,
             )
+
+
+class InstanceTypesListAcceleratorsValidator(_FlexibleInstanceTypesValidator):
+    """Confirm Accelerator requirements for Flexible Instance Types."""
+
+    def _validate(
+        self,
+        compute_resource_name: str,
+        instance_types_info: Dict[str, InstanceTypeInfo],
+    ):
+        """Check if Accelerator requirements are met.
+
+        Instance Types should have the same number of accelerators.
+        """
+        self.validate_property_homogeneity(
+            instance_type_info_list=list(instance_types_info.values()),
+            property_callback=lambda instance_type_info: instance_type_info.gpu_count(),
+            failure_message=f"Instance types listed under Compute Resource {compute_resource_name} must have the "
+            "same number of GPUs.",
+            failure_level=FailureLevel.ERROR,
+        )
+        self.validate_property_homogeneity(
+            instance_type_info_list=list(instance_types_info.values()),
+            property_callback=lambda instance_type_info: instance_type_info.inference_accelerator_count(),
+            failure_message=f"Instance types listed under Compute Resource {compute_resource_name} must have the "
+            "same number of Inference Accelerators.",
+            failure_level=FailureLevel.ERROR,
+        )
+
+        # Instance Types should have the same accelerator manufacturer
+        self.validate_property_homogeneity(
+            instance_type_info_list=list(instance_types_info.values()),
+            property_callback=lambda instance_type_info: instance_type_info.gpu_manufacturer(),
+            failure_message=f"Instance types listed under Compute Resource {compute_resource_name} must have the same "
+            "GPU manufacturer.",
+            failure_level=FailureLevel.ERROR,
+        )
+
+        self.validate_property_homogeneity(
+            instance_type_info_list=list(instance_types_info.values()),
+            property_callback=lambda instance_type_info: instance_type_info.inference_accelerator_manufacturer(),
+            failure_message=f"Instance types listed under Compute Resource {compute_resource_name} must have the same "
+            "inference accelerator manufacturer.",
+            failure_level=FailureLevel.ERROR,
+        )
