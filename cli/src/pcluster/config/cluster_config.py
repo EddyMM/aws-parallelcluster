@@ -86,6 +86,7 @@ from pcluster.validators.cluster_validators import (
     InstanceTypesListAllocationStrategyValidator,
     InstanceTypesListCPUValidator,
     InstanceTypesListEFAValidator,
+    InstanceTypesListMemorySchedulingValidator,
     InstanceTypesListNetworkingValidator,
     IntelHpcArchitectureValidator,
     IntelHpcOsValidator,
@@ -2500,6 +2501,7 @@ class SlurmClusterConfig(CommonSchedulerClusterConfig):
                         InstanceTypesListEFAValidator,
                         InstanceTypesListNetworkingValidator,
                         InstanceTypesListAllocationStrategyValidator,
+                        InstanceTypesListMemorySchedulingValidator,
                     ]
                     for validator in flexible_instance_types_validators:
                         self._register_validator(validator, **validator_args)
