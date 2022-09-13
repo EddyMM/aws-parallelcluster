@@ -1373,3 +1373,22 @@ class InstanceTypesListAllocationStrategyValidator(Validator, _FlexibleInstanceT
                 f"can only use '{cluster_config.AllocationStrategy.LOWEST_PRICE.value}' allocation strategy.",
                 FailureLevel.ERROR,
             )
+
+
+class InstanceTypesListMemorySchedulingValidator(Validator, _FlexibleInstanceTypesValidatorMixin):
+    """Validate support for Memory-based Scheduling when using Flexible Instance Types."""
+
+    def _validate(
+        self,
+        compute_resource_name: str,
+        instance_types_info: Dict[str, InstanceTypeInfo],
+        memory_scheduling_enabled: bool,
+    ):
+        """Memory-based scheduling is NOT supported for Compute Resources with multiple instance types."""
+        if memory_scheduling_enabled and len(instance_types_info.items()) > 1:
+            self._add_failure(
+                "Memory-based scheduling is only supported for Compute Resources using either 'InstanceType' or "
+                f"'InstanceTypeList' with one instance type. Compute Resource {compute_resource_name} has more than "
+                "one instance type specified.",
+                FailureLevel.ERROR,
+            )
