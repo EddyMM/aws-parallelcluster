@@ -84,6 +84,7 @@ from pcluster.validators.cluster_validators import (
     InstanceArchitectureCompatibilityValidator,
     InstanceTypesListAcceleratorsValidator,
     InstanceTypesListCPUValidator,
+    InstanceTypesListEFAValidator,
     IntelHpcArchitectureValidator,
     IntelHpcOsValidator,
     MaxCountValidator,
@@ -2491,8 +2492,13 @@ class SlurmClusterConfig(CommonSchedulerClusterConfig):
                         ),
                         memory_scheduling_enabled=self.scheduling.settings.enable_memory_based_scheduling,
                     )
-                    self._register_validator(InstanceTypesListCPUValidator, **validator_args)
-                    self._register_validator(InstanceTypesListAcceleratorsValidator, **validator_args)
+                    flexible_instance_types_validators = [
+                        InstanceTypesListCPUValidator,
+                        InstanceTypesListAcceleratorsValidator,
+                        InstanceTypesListEFAValidator,
+                    ]
+                    for validator in flexible_instance_types_validators:
+                        self._register_validator(validator, **validator_args)
 
     @property
     def image_dict(self):

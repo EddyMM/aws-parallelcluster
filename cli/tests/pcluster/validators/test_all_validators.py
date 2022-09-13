@@ -357,19 +357,24 @@ def test_scheduler_plugin_all_validators_are_called(test_datadir, mocker):
     flexible_instance_types_validators = [
         "InstanceTypesListCPUValidator",
         "InstanceTypesListAcceleratorsValidator",
+        "InstanceTypesListEFAValidator",
     ]
 
     # Assert validators are called
     for m in mockers:
-        if m["name"] in [
-            "TagKeyValidator",
-            "ClusterNameValidator",
-            "InstanceProfileValidator",
-            "RoleValidator",
-            "MixedSecurityGroupOverwriteValidator",
-            "HostedZoneValidator",
-            "InstanceTypeMemoryInfoValidator",
-        ] + flexible_instance_types_validators:
+        if (
+            m["name"]
+            in [
+                "TagKeyValidator",
+                "ClusterNameValidator",
+                "InstanceProfileValidator",
+                "RoleValidator",
+                "MixedSecurityGroupOverwriteValidator",
+                "HostedZoneValidator",
+                "InstanceTypeMemoryInfoValidator",
+            ]
+            + flexible_instance_types_validators
+        ):
             # ToDo: Reserved tag keys to be aligned between cluster and image builder
             continue
         print("Checking " + m["name"] + " is called")
