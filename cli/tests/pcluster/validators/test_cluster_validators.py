@@ -9,7 +9,7 @@
 # OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions and
 # limitations under the License.
 from enum import Enum
-from typing import Dict
+from typing import Dict, List
 
 import pytest
 from assertpy import assert_that
@@ -39,6 +39,7 @@ from pcluster.validators.cluster_validators import (
     InstanceTypesListAllocationStrategyValidator,
     InstanceTypesListCPUValidator,
     InstanceTypesListEFAValidator,
+    InstanceTypesListMemorySchedulingValidator,
     InstanceTypesListNetworkingValidator,
     IntelHpcArchitectureValidator,
     IntelHpcOsValidator,
@@ -1659,7 +1660,7 @@ def test_instance_type_list_efa_validator(
             "use of multiple instance types for Compute Resource: TestComputeResource ("
             "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/placement-groups.html#placement-groups-cluster).",
         ),
-    ]
+    ],
 )
 def test_instance_type_list_networking_validator(
     queue_name: str,
@@ -1686,12 +1687,7 @@ def test_instance_type_list_networking_validator(
             "Compute Resource TestComputeResource is using an OnDemand CapacityType. OnDemand CapacityType can only "
             "use 'lowest-price' allocation strategy.",
         ),
-        (
-            "TestComputeResource",
-            CapacityType.ONDEMAND,
-            AllocationStrategy.LOWEST_PRICE,
-            ""
-        ),
+        ("TestComputeResource", CapacityType.ONDEMAND, AllocationStrategy.LOWEST_PRICE, ""),
     ],
 )
 def test_instance_type_list_allocation_strategy_validator(
@@ -1699,5 +1695,43 @@ def test_instance_type_list_allocation_strategy_validator(
 ):
     actual_failures = InstanceTypesListAllocationStrategyValidator().execute(
         compute_resource_name, capacity_type, allocation_strategy
+    )
+    assert_failure_messages(actual_failures, expected_message)
+
+
+@pytest.mark.parametrize(
+    "compute_resource_name, instance_types_info, memory_scheduling_enabled, expected_message",
+    [
+        # Memory-based scheduling is supported for Compute Resource that use either 'InstanceType' or have a sinlge
+        # instance type under 'InstanceTypeList'
+        (
+            "TestComputeResource",
+            {
+                "t2.micro": InstanceTypeInfo({"VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2}}),
+                "t3.micro": InstanceTypeInfo({"VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2}}),
+            },
+            True,
+            "Memory-based scheduling is only supported for Compute Resources using either 'InstanceType' or "
+            "'InstanceTypeList' with one instance type. Compute Resource TestComputeResource has more than one "
+            "instance type specified.",
+        ),
+        (
+            "TestComputeResource",
+            {
+                "t2.micro": InstanceTypeInfo({"VCpuInfo": {"DefaultVCpus": 4, "DefaultCores": 2}}),
+            },
+            False,
+            "",
+        ),
+    ],
+)
+def test_instance_type_list_memory_scheduling_validator(
+    compute_resource_name: str,
+    instance_types_info: List[InstanceTypeInfo],
+    memory_scheduling_enabled: bool,
+    expected_message: str,
+):
+    actual_failures = InstanceTypesListMemorySchedulingValidator().execute(
+        compute_resource_name, instance_types_info, memory_scheduling_enabled
     )
     assert_failure_messages(actual_failures, expected_message)
