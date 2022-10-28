@@ -13,6 +13,10 @@ Scheduling:
   Scheduler: {{ scheduler }}
   SlurmQueues:
     - Name: efa-enabled
+      {% if scheduler == "slurm" %}
+      AllocationStrategy: capacity-optimized
+      CapacityType: SPOT
+      {% endif %}
       Networking:
         PlacementGroup:
           Enabled: {% if instance != "p4d.24xlarge" %}true{% else %}false{% endif %}
@@ -21,7 +25,8 @@ Scheduling:
       ComputeResources:
         - Name: efa-enabled-i1
           Instances:
-            - InstanceType: {{ instance }}
+            - InstanceType: c5n.18xlarge
+            - InstanceType: c5n.metal
           MaxCount: {{ max_queue_size }}
           MinCount: {{ max_queue_size }}
           DisableSimultaneousMultithreading: true
