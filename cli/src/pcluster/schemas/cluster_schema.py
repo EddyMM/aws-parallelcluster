@@ -648,7 +648,6 @@ class QueueNetworkingSchema(BaseNetworkingSchema):
     subnet_ids = fields.List(
         fields.Str(validate=get_field_validator("subnet_id")),
         required=True,
-        validate=validate.Length(equal=1),
         metadata={"update_policy": UpdatePolicy.QUEUE_UPDATE_STRATEGY},
     )
     assign_public_ip = fields.Bool(metadata={"update_policy": UpdatePolicy.UNSUPPORTED})
