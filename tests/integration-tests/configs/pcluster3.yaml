@@ -121,5 +121,5 @@ test-suites:
   networking:
     test_on_demand_capacity_reservation.py::test_on_demand_capacity_reservation:
       dimensions:
-        - regions: [ "us-west-2" ]
+        - regions: [ "us-east-1" ]
           oss: [ "alinux2" ]

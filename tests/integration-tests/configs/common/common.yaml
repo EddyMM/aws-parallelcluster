@@ -374,7 +374,7 @@ networking:
         schedulers: ["slurm"]
   test_on_demand_capacity_reservation.py::test_on_demand_capacity_reservation:
     dimensions:
-      - regions: [ "us-west-2" ]
+      - regions: [ "us-east-1" ]
         oss: [ "alinux2" ]
 scaling:
   test_mpi.py::test_mpi:  # TODO: move outside of the scaling dir
