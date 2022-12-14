@@ -341,32 +341,13 @@ def test_multi_az_fsx(
     import_path = "s3://{0}".format(bucket_name)
     export_path = "s3://{0}/export_dir".format(bucket_name)
 
-    partition = utils.get_arn_partition(region)
-    num_existing_fsx_ontap_volumes = 2 if partition != "aws-cn" else 0  # China does not have Ontap
-    num_existing_fsx_open_zfs_volumes = 2 if partition == "aws" else 0  # China and GovCloud do not have OpenZFS.
-    num_existing_fsx_lustre = 2
-
-    fsx_lustre_mount_dirs = [f"/fsx_lustre_mount_dir{i}" for i in range(num_existing_fsx_lustre)]
-    fsx_ontap_mount_dirs = [f"/fsx_ontap_mount_dir{i}" for i in range(num_existing_fsx_ontap_volumes)]
-    fsx_open_zfs_mount_dirs = [f"/fsx_open_zfs_mount_dir{i}" for i in range(num_existing_fsx_open_zfs_volumes)]
-
-    existing_fsx_lustre_fs_ids = _create_fsx_lustre_volume_ids(
-        num_existing_fsx_lustre, fsx_factory, import_path, export_path
-    )
-    fsx_on_tap_volume_ids = _create_fsx_on_tap_volume_ids(num_existing_fsx_ontap_volumes, fsx_factory, svm_factory)
-    fsx_open_zfs_volume_ids = _create_fsx_open_zfs_volume_ids(
-        num_existing_fsx_ontap_volumes, fsx_factory, open_zfs_volume_factory
-    )
+    existing_fsx_lustre_fs_id = _create_fsx_lustre_volume_ids(1, fsx_factory, import_path, export_path)
+    fsx_lustre_mount_dir = "/fsx_lustre_mount_dir"
 
     cluster_config = pcluster_config_reader(
-        config_file="pcluster-managed-fsx.config.yaml",
         bucket_name=bucket_name,
-        fsx_lustre_mount_dirs=fsx_lustre_mount_dirs,
-        existing_fsx_lustre_fs_ids=existing_fsx_lustre_fs_ids,
-        fsx_open_zfs_volume_ids=fsx_open_zfs_volume_ids,
-        fsx_open_zfs_mount_dirs=fsx_open_zfs_mount_dirs,
-        fsx_ontap_volume_ids=fsx_on_tap_volume_ids,
-        fsx_ontap_mount_dirs=fsx_ontap_mount_dirs,
+        fsx_lustre_mount_dir=fsx_lustre_mount_dir,
+        existing_fsx_lustre_fs_id=existing_fsx_lustre_fs_id,
     )
     cluster = clusters_factory(cluster_config)
 
@@ -374,7 +355,7 @@ def test_multi_az_fsx(
         cluster,
         region,
         scheduler_commands_factory,
-        fsx_lustre_mount_dirs + fsx_open_zfs_mount_dirs + fsx_ontap_mount_dirs,
+        [fsx_lustre_mount_dir],
         bucket_name,
     )
 
