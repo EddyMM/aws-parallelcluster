@@ -242,10 +242,17 @@ class ClusterCdkStack:
             self.log_group = self._add_cluster_log_group()
 
         # Managed security groups
-        self._head_security_group, self._compute_security_group = self._add_security_groups()
+        (
+            self._head_security_group,
+            self._compute_security_group,
+            self._login_security_group,
+        ) = self._add_security_groups()
 
         # Head Node ENI
         self._head_eni = self._add_head_eni()
+
+        # Login Node ENI
+        self._login_eni = self._add_login_eni()
 
         if self.config.shared_storage:
             for storage in self.config.shared_storage:
@@ -267,9 +274,12 @@ class ClusterCdkStack:
 
         # Head Node
         self.head_node_instance = self._add_head_node()
+        self.login_node_instance = self._add_login_node()
+        self.login_node_instance.add_depends_on(self.head_node_instance)
         # Add a dependency to the cleanup Route53 resource, so that Route53 Hosted Zone is cleaned after node is deleted
         if self._condition_is_slurm() and hasattr(self.scheduler_resources, "cleanup_route53_custom_resource"):
             self.head_node_instance.add_depends_on(self.scheduler_resources.cleanup_route53_custom_resource)
+            self.login_node_instance.add_depends_on(self.scheduler_resources.cleanup_route53_custom_resource)
 
         # AWS Batch related resources
         if self._condition_is_batch():
@@ -448,6 +458,19 @@ class ClusterCdkStack:
 
         return cleanup_resources_lambda_role, cleanup_resources_lambda
 
+    def _add_login_eni(self):
+        """Create Head Node Elastic Network Interface."""
+        login_eni_group_set = [self._login_security_group.ref]
+
+        return ec2.CfnNetworkInterface(
+            self.stack,
+            "LoginNodeENI",
+            description="AWS ParallelCluster login node interface",
+            subnet_id=self.config.head_node.networking.subnet_id,
+            source_dest_check=False,
+            group_set=login_eni_group_set,
+        )
+
     def _add_head_eni(self):
         """Create Head Node Elastic Network Interface."""
         head_eni_group_set = self._get_head_node_security_groups_full()
@@ -502,21 +525,26 @@ class ClusterCdkStack:
             managed_compute_security_group = self._add_compute_security_group()
             compute_security_groups.append(managed_compute_security_group.ref)
 
+        # LoginNode Security Group
+        managed_login_security_group = self._add_login_security_group()
+
         self._add_inbounds_to_managed_security_groups(
             compute_security_groups,
             custom_compute_security_groups,
             head_node_security_groups,
+            managed_login_security_group,
             managed_compute_security_group,
             managed_head_security_group,
         )
 
-        return managed_head_security_group, managed_compute_security_group
+        return managed_head_security_group, managed_compute_security_group, managed_login_security_group
 
     def _add_inbounds_to_managed_security_groups(
         self,
         compute_security_groups,
         custom_compute_security_groups,
         head_node_security_groups,
+        managed_login_security_group,
         managed_compute_security_group,
         managed_head_security_group,
     ):
@@ -526,6 +554,18 @@ class ClusterCdkStack:
                 self._allow_all_ingress(
                     f"HeadNodeSecurityGroupComputeIngress{index}", security_group, managed_head_security_group.ref
                 )
+            # Access to head node from login node
+            self._allow_all_ingress(
+                "HeadNodeSecurityGroupLoginNodeIngress",
+                managed_login_security_group.ref,
+                managed_head_security_group.ref,
+            )
+            for index, security_group in enumerate(compute_security_groups):
+                # Access to login node from compute nodes
+                self._allow_all_ingress(
+                    f"LoginNodeSecurityGroupComputeIngress{index}", security_group, managed_login_security_group.ref
+                )
+
         if managed_compute_security_group:
             # Access to compute nodes from head node
             for index, security_group in enumerate(head_node_security_groups):
@@ -538,6 +578,12 @@ class ClusterCdkStack:
                     security_group,
                     managed_compute_security_group.ref,
                 )
+            # Access to compute nodes from login node
+            self._allow_all_ingress(
+                "ComputeSecurityGroupLoginNodeIngress",
+                managed_login_security_group.ref,
+                managed_compute_security_group.ref,
+            )
 
     def _allow_all_ingress(self, description, source_security_group_id, group_id):
         return ec2.CfnSecurityGroupIngress(
@@ -649,6 +695,22 @@ class ClusterCdkStack:
         )
 
         return compute_security_group
+
+    def _add_login_security_group(self):
+        head_login_group_ingress = [
+            # SSH access
+            ec2.CfnSecurityGroup.IngressProperty(
+                ip_protocol="tcp", from_port=22, to_port=22, cidr_ip=self.config.head_node.ssh.allowed_ips
+            )
+        ]
+
+        return ec2.CfnSecurityGroup(
+            self.stack,
+            "LoginNodeSecurityGroup",
+            group_description="Enable access to the login node",
+            vpc_id=self.config.vpc_id,
+            security_group_ingress=head_login_group_ingress,
+        )
 
     def _add_head_security_group(self):
         head_security_group_ingress = [
@@ -892,6 +954,85 @@ class ClusterCdkStack:
         if self.scheduler_plugin_stack:
             wait_condition.add_depends_on(self.scheduler_plugin_stack)
         return wait_condition, wait_condition_handle
+
+    def _add_login_node(self):
+        head_node = self.config.head_node
+        login_lt_security_group = self._login_security_group.ref
+
+        # LT network interfaces
+        login_lt_nw_interfaces = [
+            ec2.CfnLaunchTemplate.NetworkInterfaceProperty(
+                device_index=0,
+                network_interface_id=self._login_eni.ref,
+            )
+        ]
+        for network_interface_index in range(1, head_node.max_network_interface_count):
+            login_lt_nw_interfaces.append(
+                ec2.CfnLaunchTemplate.NetworkInterfaceProperty(
+                    device_index=1,
+                    network_card_index=network_interface_index,
+                    groups=[login_lt_security_group],
+                    subnet_id=head_node.networking.subnet_id,
+                )
+            )
+
+        # Login node Launch Template
+        login_node_launch_template = ec2.CfnLaunchTemplate(
+            self.stack,
+            "LoginNodeLaunchTemplate",
+            launch_template_data=ec2.CfnLaunchTemplate.LaunchTemplateDataProperty(
+                instance_type=head_node.instance_type,
+                block_device_mappings=self._launch_template_builder.get_block_device_mappings(
+                    head_node.local_storage.root_volume, self.config.image.os
+                ),
+                key_name=head_node.ssh.key_name,
+                network_interfaces=login_lt_nw_interfaces,
+                image_id=self.config.head_node_ami,
+                ebs_optimized=head_node.is_ebs_optimized,
+                iam_instance_profile=ec2.CfnLaunchTemplate.IamInstanceProfileProperty(
+                    name=self._head_node_instance_profile
+                ),
+                metadata_options=ec2.CfnLaunchTemplate.MetadataOptionsProperty(
+                    http_tokens=get_http_tokens_setting(self.config.imds.imds_support)
+                ),
+                tag_specifications=[
+                    ec2.CfnLaunchTemplate.TagSpecificationProperty(
+                        resource_type="volume",
+                        tags=get_default_volume_tags(self._stack_name, "HeadNode") + get_custom_tags(self.config),
+                    ),
+                ],
+                user_data=Fn.base64(
+                    Fn.sub(
+                        get_user_data_content("../resources/login_node/user_data.sh"),
+                        {
+                            "headnode_private_ip": self.head_node_instance.attr_private_ip,
+                            "cluster_name_lowercase": self._stack_name.lower(),
+                            "region": self.stack.region,
+                        },
+                    )
+                ),
+            ),
+        )
+
+        login_node_instance = ec2.CfnInstance(
+            self.stack,
+            "LoginNode",
+            launch_template=ec2.CfnInstance.LaunchTemplateSpecificationProperty(
+                launch_template_id=login_node_launch_template.ref,
+                version=login_node_launch_template.attr_latest_version_number,
+            ),
+            tags=get_default_instance_tags(
+                self._stack_name, self.config, head_node, "LoginNode", self.shared_storage_infos
+            )
+            + get_custom_tags(self.config),
+        )
+        if not self._condition_is_batch():
+            login_node_instance.node.add_dependency(self.compute_fleet_resources)
+
+        if self._condition_is_scheduler_plugin() and self.scheduler_plugin_stack:
+            login_node_instance.add_depends_on(self.scheduler_plugin_stack)
+
+        return login_node_instance
 
     def _add_head_node(self):
         head_node = self.config.head_node
@@ -1332,9 +1473,23 @@ class ClusterCdkStack:
 
         CfnOutput(
             self.stack,
+            "LoginNodeInstanceID",
+            description="ID of the login node instance",
+            value=self.login_node_instance.ref,
+        )
+
+        CfnOutput(
+            self.stack,
             "HeadNodePrivateIP",
             description="Private IP Address of the head node",
             value=self.head_node_instance.attr_private_ip,
+        )
+
+        CfnOutput(
+            self.stack,
+            "LoginNodePrivateIP",
+            description="Private IP Address of the login node",
+            value=self.login_node_instance.attr_private_ip,
         )
 
         CfnOutput(
