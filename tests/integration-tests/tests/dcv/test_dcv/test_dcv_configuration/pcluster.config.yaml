@@ -33,3 +33,6 @@ Scheduling:
       Networking:
         SubnetIds:
           - {{ public_subnet_id }}
+DevSettings:
+  Cookbook:
+    ChefCookbook: https://github.com/EddyMM/aws-parallelcluster-cookbook/tarball/wip/wip/ssl-tls-1.2-simple-constructor
