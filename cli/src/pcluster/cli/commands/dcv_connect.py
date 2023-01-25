@@ -55,7 +55,7 @@ def _dcv_connect(args):
     else:
         head_node_ip = head_node.public_ip or head_node.private_ip
         # Prepare ssh command to execute in the head node instance
-        cmd = 'ssh {CFN_USER}@{HEAD_NODE_IP} {KEY} "{REMOTE_COMMAND} /home/{CFN_USER}"'.format(
+        cmd = 'ssh -v {CFN_USER}@{HEAD_NODE_IP} {KEY} "{REMOTE_COMMAND} /home/{CFN_USER}"'.format(
             CFN_USER=head_node.default_user,
             HEAD_NODE_IP=head_node_ip,
             KEY="-i {0}".format(args.key_path) if args.key_path else "",
