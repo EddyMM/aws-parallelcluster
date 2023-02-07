@@ -33,3 +33,8 @@ Scheduling:
       Networking:
         SubnetIds:
           - {{ public_subnet_id }}
+DevSettings:
+   Cookbook:
+     ChefCookbook: https://github.com/EddyMM/aws-parallelcluster-cookbook/tarball/wip/abs-path-bandit
+   AmiSearchFilters:
+    Owner: '447714826191'
