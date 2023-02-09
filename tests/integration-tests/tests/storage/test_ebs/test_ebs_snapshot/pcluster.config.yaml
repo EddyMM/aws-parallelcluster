@@ -1,5 +1,6 @@
 Image:
   Os: {{ os }}
+  CustomAmi: ami-0466f9439fa04dcda
 HeadNode:
   InstanceType: {{ instance }}
   Networking:
@@ -47,3 +48,8 @@ SharedStorage:
       Size: {{ volume_size }}
       VolumeType: gp2
       SnapshotId: {{ snapshot_id }}
+DevSettings:
+   Cookbook:
+     ChefCookbook: https://github.com/EddyMM/aws-parallelcluster-cookbook/tarball/wip/bandit-subprocess-2
+   AmiSearchFilters:
+    Owner: '447714826191'
