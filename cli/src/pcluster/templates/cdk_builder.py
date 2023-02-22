@@ -39,12 +39,12 @@ class CDKTemplateBuilder:
 
         LOGGER.info("CDK import completed successfully")
         LOGGER.info("Starting CDK template generation...")
-        with tempfile.TemporaryDirectory() as tempdir:
-            output_file = str(stack_name)
-            app = App(outdir=str(tempdir))
-            ClusterCdkStack(app, output_file, stack_name, cluster_config, bucket, log_group_name)
-            app.synth()
-            generated_template = load_yaml_dict(os.path.join(tempdir, f"{output_file}.template.json"))
+        output_file = str(stack_name)
+        cloud_assembly_folder = "/Users/eddmwiti/misc/pcluster-cdk-out"
+        app = App(outdir=str(cloud_assembly_folder))
+        ClusterCdkStack(app, output_file, stack_name, cluster_config, bucket, log_group_name)
+        app.synth()
+        generated_template = load_yaml_dict(os.path.join(cloud_assembly_folder, f"{output_file}.template.json"))
         LOGGER.info("CDK template generation completed successfully")
 
         return generated_template

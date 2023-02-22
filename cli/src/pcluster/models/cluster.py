@@ -368,16 +368,16 @@ class Cluster:
             self._upload_config()
             LOGGER.info("Generation and upload completed successfully")
 
+            LOGGER.info("Uploading cluster artifacts...")
+            # upload cluster artifacts and generated template
+            self._upload_artifacts()
+            LOGGER.info("Upload of cluster artifacts completed successfully")
+
             # Create template if not provided by the user
             if not (self.config.dev_settings and self.config.dev_settings.cluster_template):
                 self.template_body = CDKTemplateBuilder().build_cluster_template(
                     cluster_config=self.config, bucket=self.bucket, stack_name=self.stack_name
                 )
-
-            LOGGER.info("Uploading cluster artifacts...")
-            # upload cluster artifacts and generated template
-            self._upload_artifacts()
-            LOGGER.info("Upload of cluster artifacts completed successfully")
 
             LOGGER.info("Creating stack named: %s", self.stack_name)
             creation_result = AWSApi.instance().cfn.create_stack_from_url(
@@ -396,7 +396,10 @@ class Cluster:
         except Exception as e:
             if not creation_result and artifact_dir_generated:
                 # Cleanup S3 artifacts if stack is not created yet
-                self.bucket.delete_s3_artifacts()
+                # self.bucket.delete_s3_artifacts()
+                # We want to keep the artifacts on S3 so that they're available when running CDK CLI
+                # (cdk deploy --app <PATH_TO_CLOUD_ASSEMBLY_DIR>)
+                pass
             raise _cluster_error_mapper(e, str(e))
 
     def _load_config(self, cluster_config: dict) -> BaseClusterConfig:
