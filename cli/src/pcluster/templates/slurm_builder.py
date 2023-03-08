@@ -106,47 +106,47 @@ class SlurmConstruct(Construct):
         if not self._condition_disable_cluster_dns():
             self.cluster_hosted_zone = self._add_private_hosted_zone()
 
-    def register_policies_with_role(self, scope, managed_compute_instance_roles: Dict[str, iam.CfnRole]):
-        """
-        Associate the Slurm Policies to the compute node roles.
+    # def register_policies_with_role(self, scope, managed_compute_instance_roles: Dict[str, iam.CfnRole]):
+    #     """
+    #     Associate the Slurm Policies to the compute node roles.
+    #
+    #     The Slurm Policies specify permissions for accessing Route53 and DynamoDB resources.
+    #     """
+    #     for queue_name, role in managed_compute_instance_roles.items():
+    #         if role:
+    #             self._add_policies_to_compute_node_role(scope, queue_name, role.ref)
 
-        The Slurm Policies specify permissions for accessing Route53 and DynamoDB resources.
-        """
-        for queue_name, role in managed_compute_instance_roles.items():
-            if role:
-                self._add_policies_to_compute_node_role(scope, queue_name, role.ref)
-
-    def _add_policies_to_compute_node_role(self, scope, node_name, role):
-        suffix = create_hash_suffix(node_name)
-        _, policy_name = add_cluster_iam_resource_prefix(
-            self.config.cluster_name, self.config, "parallelcluster-slurm-compute", iam_type="AWS::IAM::Policy"
-        )
-        policy_statements = [
-            {
-                "sid": "SlurmDynamoDBTableQuery",
-                "effect": iam.Effect.ALLOW,
-                "actions": ["dynamodb:Query"],
-                "resources": [
-                    self._format_arn(
-                        service="dynamodb", resource=f"table/{PCLUSTER_SLURM_DYNAMODB_PREFIX}{self.stack_name}"
-                    ),
-                    self._format_arn(
-                        service="dynamodb",
-                        resource=f"table/{PCLUSTER_SLURM_DYNAMODB_PREFIX}{self.stack_name}/index/*",
-                    ),
-                ],
-            },
-        ]
-
-        iam.CfnPolicy(
-            scope,
-            f"SlurmPolicies{suffix}",
-            policy_name=policy_name or "parallelcluster-slurm-compute",
-            policy_document=iam.PolicyDocument(
-                statements=[iam.PolicyStatement(**statement) for statement in policy_statements]
-            ),
-            roles=[role],
-        )
+    # def _add_policies_to_compute_node_role(self, scope, node_name, role):
+    #     suffix = create_hash_suffix(node_name)
+    #     _, policy_name = add_cluster_iam_resource_prefix(
+    #         self.config.cluster_name, self.config, "parallelcluster-slurm-compute", iam_type="AWS::IAM::Policy"
+    #     )
+    #     policy_statements = [
+    #         {
+    #             "sid": "SlurmDynamoDBTableQuery",
+    #             "effect": iam.Effect.ALLOW,
+    #             "actions": ["dynamodb:Query"],
+    #             "resources": [
+    #                 self._format_arn(
+    #                     service="dynamodb", resource=f"table/{PCLUSTER_SLURM_DYNAMODB_PREFIX}{self.stack_name}"
+    #                 ),
+    #                 self._format_arn(
+    #                     service="dynamodb",
+    #                     resource=f"table/{PCLUSTER_SLURM_DYNAMODB_PREFIX}{self.stack_name}/index/*",
+    #                 ),
+    #             ],
+    #         },
+    #     ]
+    #
+    #     iam.CfnPolicy(
+    #         scope,
+    #         f"SlurmPolicies{suffix}",
+    #         policy_name=policy_name or "parallelcluster-slurm-compute",
+    #         policy_document=iam.PolicyDocument(
+    #             statements=[iam.PolicyStatement(**statement) for statement in policy_statements]
+    #         ),
+    #         roles=[role],
+    #     )
 
     def _add_policies_to_head_node_role(self, node_name, role):
         suffix = create_hash_suffix(node_name)

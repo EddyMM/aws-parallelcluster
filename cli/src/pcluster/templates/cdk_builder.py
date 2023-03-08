@@ -19,6 +19,7 @@ import tempfile
 from pcluster.config.cluster_config import BaseClusterConfig
 from pcluster.config.imagebuilder_config import ImageBuilderConfig
 from pcluster.models.s3_bucket import S3Bucket
+from pcluster.templates.compute_fleet_stack import ComputeFleetStack
 from pcluster.utils import load_yaml_dict
 
 LOGGER = logging.getLogger(__name__)
@@ -40,10 +41,33 @@ class CDKTemplateBuilder:
         LOGGER.info("CDK import completed successfully")
         LOGGER.info("Starting CDK template generation...")
         with tempfile.TemporaryDirectory() as tempdir:
+            output_file = f"ComputeFleet{stack_name}"
+            app = App(outdir=str(tempdir))
+            ComputeFleetStack(
+                scope=app,
+                id="ComputeFleet",
+                cluster_config=cluster_config,
+                cluster_stack_name=str(stack_name)
+            )
+            app.synth()
+            LOGGER.info("First synthesis (ComputeFleetStack)")
+            print(os.listdir(str(tempdir)))
+
+        with tempfile.TemporaryDirectory() as tempdir:
             output_file = str(stack_name)
             app = App(outdir=str(tempdir))
-            ClusterCdkStack(app, output_file, stack_name, cluster_config, bucket, log_group_name)
+            ClusterCdkStack(
+                app,
+                output_file,
+                stack_name,
+                cluster_config,
+                bucket,
+                log_group_name,
+                compute_fleet_template_url="TEST_COMPUTE_FLEET_TEMPLATE_URL",
+            )
             app.synth()
+            LOGGER.info("Second synthesis (ClusterStack)")
+            print(os.listdir(str(tempdir)))
             generated_template = load_yaml_dict(os.path.join(tempdir, f"{output_file}.template.json"))
         LOGGER.info("CDK template generation completed successfully")
 

@@ -241,7 +241,7 @@ def convert_deletion_policy(deletion_policy: str):
     return None
 
 
-def get_queue_security_groups_full(managed_compute_security_group: ec2.CfnSecurityGroup, queue: BaseQueue):
+def get_queue_security_groups_full(managed_compute_security_group: str, queue: BaseQueue):
     """Return full security groups to be used for the queue, default plus additional ones."""
     queue_security_groups = []
 
@@ -249,7 +249,7 @@ def get_queue_security_groups_full(managed_compute_security_group: ec2.CfnSecuri
     if queue.networking.security_groups:
         queue_security_groups.extend(queue.networking.security_groups)
     else:
-        queue_security_groups.append(managed_compute_security_group.ref)
+        queue_security_groups.append(managed_compute_security_group)
 
     # Additional security groups
     if queue.networking.additional_security_groups:
@@ -310,7 +310,7 @@ def apply_permissions_boundary(boundary, scope):
         PermissionsBoundary.of(scope).apply(boundary)
 
 
-def scheduler_is_slurm(config: BaseClusterConfig):
+def is_scheduler_slurm(config: BaseClusterConfig):
     return config.scheduling.scheduler == "slurm"
 
 
