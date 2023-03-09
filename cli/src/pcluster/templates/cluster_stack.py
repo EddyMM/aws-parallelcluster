@@ -40,6 +40,7 @@ from aws_cdk.core import (
     CustomResource,
     Duration,
     Fn,
+    NestedStack,
     Stack,
 )
 
@@ -1384,7 +1385,7 @@ class ClusterCdkStack:
         )
 
 
-class ComputeFleetConstruct(Construct):
+class ComputeFleetConstruct(NestedStack):
     """Construct defining compute fleet specific resources."""
 
     def __init__(
@@ -1425,7 +1426,7 @@ class ComputeFleetConstruct(Construct):
     @property
     def stack_name(self):
         """Name of the CFN stack."""
-        return Stack.of(self).stack_name
+        return Stack.of(self.nested_stack_parent).stack_name
 
     # -- Resources --------------------------------------------------------------------------------------------------- #
 

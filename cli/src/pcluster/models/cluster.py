@@ -166,6 +166,7 @@ class Cluster:
     """Represent a running cluster, composed by a ClusterConfig and a ClusterStack."""
 
     def __init__(self, name: str, config: str = None, stack: ClusterStack = None):
+        self.assets_metadata = None
         self.name = name
         self.__source_config_text = config
         self.__stack = stack
@@ -370,7 +371,7 @@ class Cluster:
 
             # Create template if not provided by the user
             if not (self.config.dev_settings and self.config.dev_settings.cluster_template):
-                self.template_body = CDKTemplateBuilder().build_cluster_template(
+                self.template_body, self.assets_metadata = CDKTemplateBuilder().build_cluster_template(
                     cluster_config=self.config, bucket=self.bucket, stack_name=self.stack_name
                 )
 
@@ -380,6 +381,23 @@ class Cluster:
             LOGGER.info("Upload of cluster artifacts completed successfully")
 
             LOGGER.info("Creating stack named: %s", self.stack_name)
+            asset_parameters = [
+                (
+                    {
+                        "ParameterKey": asset_metadata["hash_parameter"]["key"],
+                        "ParameterValue": asset_metadata["hash_parameter"]["value"],
+                    },
+                    {
+                        "ParameterKey": asset_metadata["s3_bucket_parameter"]["key"],
+                        "ParameterValue": asset_metadata["s3_bucket_parameter"]["value"],
+                    },
+                    {
+                        "ParameterKey": asset_metadata["s3_object_key_parameter"]["key"],
+                        "ParameterValue": f"{asset_metadata['s3_object_key_parameter']['value']}||",
+                    },
+                )
+                for asset_id, asset_metadata in self.assets_metadata.items()
+            ]
             creation_result = AWSApi.instance().cfn.create_stack_from_url(
                 stack_name=self.stack_name,
                 template_url=self.bucket.get_cfn_template_url(
@@ -387,6 +405,11 @@ class Cluster:
                 ),
                 disable_rollback=disable_rollback,
                 tags=self._get_cfn_tags(),
+                parameters=[
+                    parameter_key_value
+                    for asset_parameter in asset_parameters
+                    for parameter_key_value in asset_parameter
+                ],
             )
 
             return creation_result.get("StackId"), suppressed_validation_failures
