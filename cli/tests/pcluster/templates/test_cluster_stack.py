@@ -178,14 +178,14 @@ def test_add_alarms(mocker, config_file_name):
                         "LaunchTemplate1f8c19f38f8d4f7fVersion": {
                             "Fn::GetAtt": [
                                 "ComputeFleetNestedStackComputeFleetNestedStackResource77B9417D",
-                                "Outputs.clusternameComputeFleetLaunchTemplate1f8c19f38f8d4f7f5C6D2968Latest"
+                                "Outputs.clusternameComputeFleetLaunchTemplate1f8c19f38f8d4f7f5C6D2968Latest" +
                                 "VersionNumber",
                             ]
                         },
                         "LaunchTemplateA6f65dee6703df4aVersion": {
                             "Fn::GetAtt": [
                                 "ComputeFleetNestedStackComputeFleetNestedStackResource77B9417D",
-                                "Outputs.clusternameComputeFleetLaunchTemplateA6f65dee6703df4a8F74C9D6Latest"
+                                "Outputs.clusternameComputeFleetLaunchTemplateA6f65dee6703df4a8F74C9D6Latest" +
                                 "VersionNumber",
                             ]
                         },
@@ -215,14 +215,14 @@ def test_add_alarms(mocker, config_file_name):
                         "LaunchTemplate1f8c19f38f8d4f7fVersion": {
                             "Fn::GetAtt": [
                                 "ComputeFleetNestedStackComputeFleetNestedStackResource77B9417D",
-                                "Outputs.clusternameComputeFleetLaunchTemplate1f8c19f38f8d4f7f5C6D2968Latest"
+                                "Outputs.clusternameComputeFleetLaunchTemplate1f8c19f38f8d4f7f5C6D2968Latest" +
                                 "VersionNumber",
                             ]
                         },
                         "LaunchTemplateA6f65dee6703df4aVersion": {
                             "Fn::GetAtt": [
                                 "ComputeFleetNestedStackComputeFleetNestedStackResource77B9417D",
-                                "Outputs.clusternameComputeFleetLaunchTemplateA6f65dee6703df4a8F74C9D6Latest"
+                                "Outputs.clusternameComputeFleetLaunchTemplateA6f65dee6703df4a8F74C9D6Latest" +
                                 "VersionNumber",
                             ]
                         },
@@ -247,21 +247,21 @@ def test_add_alarms(mocker, config_file_name):
                         "LaunchTemplate1f8c19f38f8d4f7fVersion": {
                             "Fn::GetAtt": [
                                 "ComputeFleetNestedStackComputeFleetNestedStackResource77B9417D",
-                                "Outputs.clusternameComputeFleetLaunchTemplate1f8c19f38f8d4f7f5C6D2968Latest"
+                                "Outputs.clusternameComputeFleetLaunchTemplate1f8c19f38f8d4f7f5C6D2968Latest" +
                                 "VersionNumber",
                             ]
                         },
                         "LaunchTemplateA6f65dee6703df4aVersion": {
                             "Fn::GetAtt": [
                                 "ComputeFleetNestedStackComputeFleetNestedStackResource77B9417D",
-                                "Outputs.clusternameComputeFleetLaunchTemplateA6f65dee6703df4a8F74C9D6Latest"
+                                "Outputs.clusternameComputeFleetLaunchTemplateA6f65dee6703df4a8F74C9D6Latest" +
                                 "VersionNumber",
                             ]
                         },
                         "LaunchTemplate7916067054f91933Version": {
                             "Fn::GetAtt": [
                                 "ComputeFleetNestedStackComputeFleetNestedStackResource77B9417D",
-                                "Outputs.clusternameComputeFleetLaunchTemplate7916067054f919339D81AB14Latest"
+                                "Outputs.clusternameComputeFleetLaunchTemplate7916067054f919339D81AB14Latest" +
                                 "VersionNumber",
                             ]
                         },
@@ -291,28 +291,28 @@ def test_add_alarms(mocker, config_file_name):
                         "LaunchTemplate1f8c19f38f8d4f7fVersion": {
                             "Fn::GetAtt": [
                                 "ComputeFleetNestedStackComputeFleetNestedStackResource77B9417D",
-                                "Outputs.clusternameComputeFleetLaunchTemplate1f8c19f38f8d4f7f5C6D2968Latest"
+                                "Outputs.clusternameComputeFleetLaunchTemplate1f8c19f38f8d4f7f5C6D2968Latest" +
                                 "VersionNumber",
                             ]
                         },
                         "LaunchTemplate7916067054f91933Version": {
                             "Fn::GetAtt": [
                                 "ComputeFleetNestedStackComputeFleetNestedStackResource77B9417D",
-                                "Outputs.clusternameComputeFleetLaunchTemplate7916067054f919339D81AB14Latest"
+                                "Outputs.clusternameComputeFleetLaunchTemplate7916067054f919339D81AB14Latest" +
                                 "VersionNumber",
                             ]
                         },
                         "LaunchTemplateA46d18b906a50d3aVersion": {
                             "Fn::GetAtt": [
                                 "ComputeFleetNestedStackComputeFleetNestedStackResource77B9417D",
-                                "Outputs.clusternameComputeFleetLaunchTemplateA46d18b906a50d3a08457C8FLatest"
+                                "Outputs.clusternameComputeFleetLaunchTemplateA46d18b906a50d3a08457C8FLatest" +
                                 "VersionNumber",
                             ]
                         },
                         "LaunchTemplateA6f65dee6703df4aVersion": {
                             "Fn::GetAtt": [
                                 "ComputeFleetNestedStackComputeFleetNestedStackResource77B9417D",
-                                "Outputs.clusternameComputeFleetLaunchTemplateA6f65dee6703df4a8F74C9D6Latest"
+                                "Outputs.clusternameComputeFleetLaunchTemplateA6f65dee6703df4a8F74C9D6Latest" +
                                 "VersionNumber",
                             ]
                         },
@@ -332,7 +332,7 @@ def test_scheduler_plugin_substack(mocker, config_file_name, expected_scheduler_
         input_yaml, cluster = load_cluster_model_from_yaml(config_file_name)
     else:
         input_yaml, cluster = load_cluster_model_from_yaml(config_file_name, test_datadir)
-    generated_template, cdk_assets_by_id = CDKTemplateBuilder().build_cluster_template(
+    generated_template, _ = CDKTemplateBuilder().build_cluster_template(
         cluster_config=cluster, bucket=dummy_cluster_bucket(), stack_name="clustername"
     )
     print(yaml.dump(generated_template))
@@ -461,11 +461,11 @@ def test_compute_launch_template_properties(
     mock_bucket_object_utils(mocker)
 
     input_yaml, cluster = load_cluster_model_from_yaml(config_file_name, test_datadir)
-    generated_template, cdk_assets_by_id = CDKTemplateBuilder().build_cluster_template(
+    generated_template, cdk_assets = CDKTemplateBuilder().build_cluster_template(
         cluster_config=cluster, bucket=dummy_cluster_bucket(), stack_name="clustername"
     )
 
-    asset_content = get_asset_content_with_resource_name(cdk_assets_by_id.values(), "LaunchTemplate64e1c3597ca4c326")
+    asset_content = get_asset_content_with_resource_name(cdk_assets, "LaunchTemplate64e1c3597ca4c326")
 
     for lt_assertion in lt_assertions:
         lt_assertion.assert_lt_properties(asset_content, "LaunchTemplate64e1c3597ca4c326")

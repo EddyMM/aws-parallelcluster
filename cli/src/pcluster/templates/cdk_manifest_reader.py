@@ -28,8 +28,8 @@ class CDKManifestReader:
     It also has convenience methods to get the manifest info in a structured way.
     """
 
-    def __init__(self, cloud_assembly_dir: str):
-        with open(os.path.join(cloud_assembly_dir, "manifest.json"), "r", encoding="utf-8") as manifest:
+    def __init__(self, manifest_file_path: str):
+        with open(manifest_file_path, "r", encoding="utf-8") as manifest:
             self._manifest_json = json.load(manifest)
 
     def get_assets(self, stack_name):
@@ -39,7 +39,7 @@ class CDKManifestReader:
         Output:
         ```
         [
-            "id": {
+            {
                 "path": "<Path on disk to the asset>",
                 "id": "<Logical identifier for the asset>",
                 "packaging": "<Type of asset>",
@@ -51,15 +51,12 @@ class CDKManifestReader:
             },
             ...
         ]
+        ```
         For more info, see:
         https://github.com/aws/aws-cdk/blob/v1-main/packages/%40aws-cdk/cloud-assembly-schema/schema/cloud-assembly.schema.json
-        ```
         """
         cdk_assets = jmespath.search(
             f'artifacts."{stack_name}".metadata."/{stack_name}"[?type==`aws:cdk:asset`].data', self._manifest_json
-        )
+        ) or []
         LOGGER.info(f"CDK assets in cloud assembly directory: {cdk_assets}")
-        cdk_assets_by_id = {}
-        if cdk_assets:
-            cdk_assets_by_id = {asset["id"]: asset for asset in cdk_assets}
-        return cdk_assets_by_id
+        return cdk_assets

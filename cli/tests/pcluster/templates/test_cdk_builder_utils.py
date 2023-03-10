@@ -443,7 +443,7 @@ def test_iam_resource_prefix_build_in_cdk(mocker, test_datadir, config_file_name
 
     input_yaml = load_yaml_dict(test_datadir / config_file_name)
     cluster_config = ClusterSchema(cluster_name="clustername").load(input_yaml)
-    generated_template, cdk_assets_by_id = CDKTemplateBuilder().build_cluster_template(
+    generated_template, cdk_assets = CDKTemplateBuilder().build_cluster_template(
         cluster_config=cluster_config, bucket=dummy_cluster_bucket(), stack_name="clustername"
     )
 
@@ -452,7 +452,7 @@ def test_iam_resource_prefix_build_in_cdk(mocker, test_datadir, config_file_name
         iam_path_prefix, iam_name_prefix = split_resource_prefix(cluster_config.iam.resource_prefix)
     generated_template = generated_template["Resources"]
     asset_resource = get_asset_content_with_resource_name(
-        cdk_assets_by_id.values(), "InstanceProfile15b342af42246b70"
+        cdk_assets, "InstanceProfile15b342af42246b70"
     ).get("Resources")
     role_name_ref = asset_resource["InstanceProfile15b342af42246b70"]["Properties"]["Roles"][0][
         "Ref"

@@ -25,7 +25,7 @@ class CDKAssetsUploadManager:
     def __init__(self, cloud_assembly_dir: str):
         self._cloud_assembly_dir = cloud_assembly_dir
         self._assets_metadata = {}
-        self.cdk_manifest_reader = CDKManifestReader(str(cloud_assembly_dir))
+        self.cdk_manifest_reader = CDKManifestReader(os.path.join(cloud_assembly_dir, "manifest.json"))
 
     def upload_assets(self, stack_name: str, bucket: S3Bucket):
         """
@@ -34,8 +34,8 @@ class CDKAssetsUploadManager:
         Returns a mapping of the Asset Logical ID and associated parameters to be passed to the root template.
         Output:
         ```
-        {
-            '<ASSET_LOGICAL_ID>': {
+        [
+            {
                 'hash_parameter': {
                     'key': 'AssetParameters<ASSET_LOGICAL_ID>ArtifactHash<ALPHANUMERIC>', 'value': ''
                 },
@@ -45,16 +45,19 @@ class CDKAssetsUploadManager:
                 's3_object_key_parameter': {
                     'key': 'AssetParameters<ASSET_LOGICAL_ID>S3VersionKey<ALPHANUMERIC>', 'value': '<ASSET_OBJECT_KEY>'
                 }
-            }
-        }
+            },
+            ...
+        ]
         ```
         """
-        cdk_assets_by_id = self.cdk_manifest_reader.get_assets(stack_name=stack_name)
+        cdk_assets = self.cdk_manifest_reader.get_assets(stack_name=stack_name)
+        self._assets_metadata = []
 
-        for asset_id, cdk_asset in cdk_assets_by_id.items():
+        for cdk_asset in cdk_assets:
             asset_file_path = os.path.join(self._cloud_assembly_dir, cdk_asset["path"])
             asset_file_content = load_yaml_dict(asset_file_path)
-            self._assets_metadata[asset_id] = {
+            asset_id = cdk_asset['id']
+            self._assets_metadata.append({
                 # `artifactHashParameter` only needed when using `cdk deploy` to check the integrity of files
                 # uploaded to S3
                 "hash_parameter": {"key": cdk_asset["artifactHashParameter"], "value": ""},
@@ -64,7 +67,7 @@ class CDKAssetsUploadManager:
                     "value": bucket.get_object_key(S3FileType.ASSETS, asset_id),
                 },
                 "content": asset_file_content,
-            }
+            })
             LOGGER.info(f"Uploading asset {asset_id} to S3")
             bucket.upload_cfn_asset(asset_file_content=asset_file_content, asset_name=asset_id)
 
