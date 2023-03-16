@@ -20,17 +20,79 @@ from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as awslambda
 from aws_cdk import aws_logs as logs
-from aws_cdk.core import CfnCustomResource, CfnResource, CfnTag, Construct, Fn, NestedStack, Stack
+from aws_cdk.core import CfnCustomResource, CfnResource, Construct, Stack
 
-from pcluster.config.cluster_config import (
-    SlurmClusterConfig,
-)
-from pcluster.constants import (
-    PCLUSTER_CLUSTER_NAME_TAG,
-)
+from pcluster.config.cluster_config import SlurmClusterConfig
+from pcluster.constants import MAX_CRS_PER_LAUNCH, PCLUSTER_CLUSTER_NAME_TAG
 from pcluster.templates.queue_group_stack import QueueGroupStack
 from pcluster.templates.slurm_builder import SlurmConstruct
-from pcluster.utils import grouper, LOGGER
+from pcluster.utils import LOGGER, grouper
+
+
+class LaunchGroupConstruct(Construct):
+    """
+    CDK Construct for the batch of Groups of Queue Stacks.
+
+    This prevents  exceeding the AWS API Request Limit.
+    """
+
+    def __init__(
+        self,
+        scope: Construct,
+        id: str,
+        queue_cohort,
+        cluster_config: SlurmClusterConfig,
+        log_group: logs.CfnLogGroup,
+        shared_storage_infos: Dict,
+        shared_storage_mount_dirs: Dict,
+        shared_storage_attributes: Dict,
+        cluster_hosted_zone,
+        dynamodb_table,
+        head_eni,
+        slurm_construct: SlurmConstruct,
+        compute_security_group,
+    ):
+        super().__init__(scope, id)
+        self._config = cluster_config
+        self._shared_storage_infos = shared_storage_infos
+        self._shared_storage_mount_dirs = shared_storage_mount_dirs
+        self._shared_storage_attributes = shared_storage_attributes
+        self._log_group = log_group
+        self._cluster_hosted_zone = cluster_hosted_zone
+        self._dynamodb_table = dynamodb_table
+        self._head_eni = head_eni
+        self._slurm_construct = slurm_construct
+        self._compute_security_group = compute_security_group
+
+        self.compute_fleet_launch_templates = {}
+        self.managed_compute_fleet_instance_roles = {}
+        self.managed_compute_fleet_placement_groups = {}
+        self.queue_cohort = queue_cohort
+        self.queue_group_stacks = []
+        self._add_resources()
+
+    def _add_resources(self):
+        for n, queue_group in enumerate(grouper(self.queue_cohort, 8)):
+            LOGGER.info(f"QueueGroup{n}: {[queue.name for queue in queue_group]}")
+            queue_group_stack = QueueGroupStack(
+                scope=self,
+                id=f"QueueGroupStack{self.node.id}{n}",
+                queues=queue_group,
+                cluster_config=self._config,
+                log_group=self._log_group,
+                shared_storage_infos=self._shared_storage_infos,
+                shared_storage_mount_dirs=self._shared_storage_mount_dirs,
+                shared_storage_attributes=self._shared_storage_attributes,
+                cluster_hosted_zone=self._cluster_hosted_zone,
+                dynamodb_table=self._dynamodb_table,
+                head_eni=self._head_eni,
+                slurm_construct=self._slurm_construct,
+                compute_security_group=self._compute_security_group,
+            )
+            self.managed_compute_fleet_instance_roles.update(queue_group_stack.managed_compute_instance_roles)
+            self.compute_fleet_launch_templates.update(queue_group_stack.compute_launch_templates)
+            self.managed_compute_fleet_placement_groups.update(queue_group_stack.managed_placement_groups)
+            self.queue_group_stacks.append(queue_group_stack)
 
 
 class ComputeFleetStack(Construct):
@@ -67,7 +129,7 @@ class ComputeFleetStack(Construct):
         self._head_eni = head_eni
         self._slurm_construct = slurm_construct
 
-        self.compute_fleet_launch_templates = {}
+        self.launch_templates = {}
         self.managed_compute_fleet_instance_roles = {}
         self.managed_compute_fleet_placement_groups = {}
 
@@ -85,31 +147,69 @@ class ComputeFleetStack(Construct):
         """Mapping of each queue and the IAM role associated with its compute resources."""
         return self.managed_compute_fleet_instance_roles
 
-    @property
-    def compute_launch_templates(self):
-        return self.compute_fleet_launch_templates
+    @staticmethod
+    def _create_queue_cohorts_per_launch(queues):
+        cohorts = []
+
+        if sum(len(queue.compute_resources) for queue in queues) <= MAX_CRS_PER_LAUNCH:
+            return [queues]
+
+        current_total_crs = 0
+        current_cohort = []
+        for n, queue in enumerate(queues):
+            no_of_crs = len(queue.compute_resources)
+            if current_total_crs + no_of_crs > MAX_CRS_PER_LAUNCH:
+                cohorts.append(current_cohort)
+                current_cohort = []
+                current_total_crs = 0
+                continue
+            current_total_crs += no_of_crs
+            current_cohort.append(queue)
+
+            if n == len(queues) - 1:
+                cohorts.append(current_cohort)
+                current_cohort = []
+                current_total_crs = 0
+
+        return cohorts
 
     def _add_resources(self):
-        for n, queue_group in enumerate(grouper(self._config.scheduling.queues, 3)):
-            LOGGER.info(f"QueueGroup{n}: {[queue.name for queue in queue_group]}")
-            queue_group_stack = QueueGroupStack(
-                scope=self,
-                id=f"QueueGroupStack{n}",
-                queues=queue_group,
-                cluster_config=self._config,
-                log_group=self._log_group,
-                shared_storage_infos=self._shared_storage_infos,
-                shared_storage_mount_dirs=self._shared_storage_mount_dirs,
-                shared_storage_attributes=self._shared_storage_attributes,
-                cluster_hosted_zone=self._cluster_hosted_zone,
-                dynamodb_table=self._dynamodb_table,
-                head_eni=self._head_eni,
-                slurm_construct=self._slurm_construct,
-                compute_security_group=self._compute_security_group,
+        queue_cohorts = self._create_queue_cohorts_per_launch(self._config.scheduling.queues)
+
+        a = []
+        for queue_cohort in queue_cohorts:
+            b = []
+            for queue in queue_cohort:
+                b.append(queue.name)
+            a.append(b)
+        LOGGER.info(f"queue_cohorts: {a}")
+
+        launch_groups = []
+        for m, queue_cohort in enumerate(queue_cohorts):
+            launch_groups.append(
+                LaunchGroupConstruct(
+                    scope=self,
+                    id=f"LaunchGroup{m}",
+                    queue_cohort=queue_cohort,
+                    cluster_config=self._config,
+                    log_group=self._log_group,
+                    shared_storage_infos=self._shared_storage_infos,
+                    shared_storage_mount_dirs=self._shared_storage_mount_dirs,
+                    shared_storage_attributes=self._shared_storage_attributes,
+                    cluster_hosted_zone=self._cluster_hosted_zone,
+                    dynamodb_table=self._dynamodb_table,
+                    head_eni=self._head_eni,
+                    slurm_construct=self._slurm_construct,
+                    compute_security_group=self._compute_security_group,
+                )
             )
-            self.managed_compute_fleet_instance_roles.update(queue_group_stack.managed_compute_instance_roles)
-            self.compute_fleet_launch_templates.update(queue_group_stack.compute_launch_templates)
-            self.managed_compute_fleet_placement_groups.update(queue_group_stack.managed_placement_groups)
+
+        for n, launch_group in enumerate(launch_groups):
+            self.managed_compute_fleet_instance_roles.update(launch_group.managed_compute_fleet_instance_roles)
+            self.launch_templates.update(launch_group.compute_fleet_launch_templates)
+            self.managed_compute_fleet_placement_groups.update(launch_group.managed_compute_fleet_placement_groups)
+            if n < len(launch_groups) - 1:
+                launch_groups[n + 1].node.add_dependency(launch_groups[n])
 
         custom_resource_deps = list(self.managed_compute_fleet_placement_groups.values())
         if self._compute_security_group:

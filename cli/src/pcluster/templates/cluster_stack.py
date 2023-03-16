@@ -1277,9 +1277,9 @@ class ClusterCdkStack:
             return None
 
         lt_config = {"Queues": {}}
-        for queue, compute_resouces in self.compute_fleet_resources.compute_launch_templates.items():
+        for queue, compute_resources in self.compute_fleet_resources.launch_templates.items():
             lt_config["Queues"][queue] = {"ComputeResources": {}}
-            for compute_resource, launch_template in compute_resouces.items():
+            for compute_resource, launch_template in compute_resources.items():
                 lt_config["Queues"][queue]["ComputeResources"][compute_resource] = {
                     "LaunchTemplate": {"Id": launch_template.ref, "Version": launch_template.attr_latest_version_number}
                 }
