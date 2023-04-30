@@ -58,6 +58,7 @@ class QueueGroupStack(NestedStack):
         head_eni,
     ):
         super().__init__(scope, id)
+        self._nested_stack_id_hash = create_hash_suffix(id)
         self._queues = queues
         self._slurm_construct = slurm_construct
         self._config = cluster_config
@@ -187,7 +188,7 @@ class QueueGroupStack(NestedStack):
         return ec2.CfnLaunchTemplate(
             self,
             f"LaunchTemplate{create_hash_suffix(queue.name + compute_resource.name)}",
-            launch_template_name=f"{self.stack_name}-{queue.name}-{compute_resource.name}",
+            launch_template_name=f"{self.stack_name}-{queue.name}-{compute_resource.name}-{self._nested_stack_id_hash}",
             launch_template_data=ec2.CfnLaunchTemplate.LaunchTemplateDataProperty(
                 block_device_mappings=self._launch_template_builder.get_block_device_mappings(
                     queue.compute_settings.local_storage.root_volume, self._config.image.os
