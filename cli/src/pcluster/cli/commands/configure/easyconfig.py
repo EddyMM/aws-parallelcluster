@@ -196,9 +196,8 @@ def configure(args):  # noqa: C901
         if scheduler == "awsbatch":
             number_of_compute_resources = 1
         else:
-            queue_limit = min(
-                (MAX_NUMBER_OF_COMPUTE_RESOURCES_PER_CLUSTER / number_of_queues), MAX_COMPUTE_RESOURCES_PER_QUEUE
-            )
+            queue_limit = MAX_COMPUTE_RESOURCES_PER_QUEUE / number_of_queues
+
             number_of_compute_resources = int(
                 prompt(
                     f"Number of compute resources for {queue_name}",
