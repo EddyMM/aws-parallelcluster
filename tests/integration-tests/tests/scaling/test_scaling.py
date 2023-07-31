@@ -14,10 +14,10 @@ import logging
 import pytest
 from assertpy import assert_that, soft_assertions
 from remote_command_executor import RemoteCommandExecutionError, RemoteCommandExecutor
-from retrying import retry
+from retrying import retry, RetryError
 from time_utils import minutes, seconds
 
-from tests.common.assertions import assert_no_errors_in_logs
+from tests.common.assertions import assert_no_errors_in_logs, assert_lines_in_logs
 from tests.common.scaling_common import get_compute_nodes_allocation
 from tests.schedulers.test_slurm import _assert_job_state
 
@@ -85,6 +85,64 @@ def test_multiple_jobs_submission(
 
     logging.info("Verifying no error in logs")
     assert_no_errors_in_logs(remote_command_executor, scheduler)
+
+
+def _submit_single_job_single_node(scheduler_commands, remote_command_executor):
+    remote_command_executor.clear_slurm_resume_log()
+
+    result = scheduler_commands.submit_command(
+        "srun hostname",
+        partition="queue-jls-1-partial",
+        host="queue-jls-1-partial-dy-compute-resource-0-1,queue-jls-1-partial-dy-ice-cr-multiple-1",
+        other_options=f"--ntasks-per-node 1 --ntasks 2"
+    )
+    job_id = scheduler_commands.assert_job_submitted(result.stdout)
+    try:
+        scheduler_commands.wait_job_completed(job_id, timeout=2)
+    except RetryError as e:
+        # Timeout waiting for job to be completed
+        logging.info("Exception while waiting for job to complete: %s", e)
+
+    scheduler_commands.assert_job_state(job_id, expected_state="PENDING")
+    retry(wait_fixed=seconds(20), stop_max_delay=minutes(3))(assert_lines_in_logs)(
+        remote_command_executor,
+        ["/var/log/parallelcluster/slurm_resume.log"],
+        [
+            "Terminating unassigned launched instances.*queue-jls-1-partial.*compute-resource-0.*",
+            "Failed to launch following nodes.*queue-jls-1-partial-dy-ice-cr-multiple-1.*" +
+            "queue-jls-1-partial-dy-compute-resource-0-1.*",
+        ],
+    )
+    scheduler_commands.cancel_job(job_id)
+
+
+def _submit_single_job_multiple_nodes_partial_capacity(scheduler_commands, partition):
+    pass
+
+
+def _submit_multiple_jobs_multiple_nodes(scheduler_commands, partition):
+    pass
+
+
+@pytest.mark.usefixtures("os", "instance")
+def test_job_level_scaling(
+    pcluster_config_reader,
+    clusters_factory,
+    scheduler_commands_factory,
+    test_datadir,
+):
+    cluster_config = pcluster_config_reader()
+    cluster = clusters_factory(cluster_config)
+    remote_command_executor = RemoteCommandExecutor(cluster)
+    scheduler_commands = scheduler_commands_factory(remote_command_executor)
+
+    # after the cluster is launched, apply the override patch to launch ice for nodes in
+    # "ice-compute-resource" and "ice-cr-multiple" compute resources
+    remote_command_executor.run_remote_script(str(test_datadir / "overrides.sh"), run_as_root=True)
+
+    _submit_single_job_single_node(scheduler_commands, remote_command_executor)
+    # _submit_single_job_multiple_nodes(scheduler_commands, partition="queue-jls-2")
+    # _submit_multiple_jobs_multiple_nodes(scheduler_commands, partition="queue-jls-3")
 
 
 def _assert_scaling_works(
