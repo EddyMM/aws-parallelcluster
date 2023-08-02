@@ -194,21 +194,21 @@ class Cluster:
 
     def describe_cluster(self):
         """Run pcluster describe-cluster and return the result."""
-        if self.cluster_info:
+        # if self.cluster_info:
+        #     return self.cluster_info
+        # else:
+        cmd_args = ["pcluster", "describe-cluster", "--cluster-name", self.name]
+        try:
+            result = run_pcluster_command(
+                cmd_args, log_error=False, custom_cli_credentials=self.custom_cli_credentials
+            )
+            response = json.loads(result.stdout)
+            logging.info("Get cluster {0} status successfully".format(self.name))
+            self.cluster_info = response
             return self.cluster_info
-        else:
-            cmd_args = ["pcluster", "describe-cluster", "--cluster-name", self.name]
-            try:
-                result = run_pcluster_command(
-                    cmd_args, log_error=False, custom_cli_credentials=self.custom_cli_credentials
-                )
-                response = json.loads(result.stdout)
-                logging.info("Get cluster {0} status successfully".format(self.name))
-                self.cluster_info = response
-                return self.cluster_info
-            except subprocess.CalledProcessError as e:
-                logging.error("Failed when getting cluster status with error:\n%s\nand output:\n%s", e.stderr, e.stdout)
-                raise
+        except subprocess.CalledProcessError as e:
+            logging.error("Failed when getting cluster status with error:\n%s\nand output:\n%s", e.stderr, e.stdout)
+            raise
 
     def describe_compute_fleet(self):
         """Run pcluster describe-compute-fleet and return the result."""
