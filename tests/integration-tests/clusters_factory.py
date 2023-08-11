@@ -19,6 +19,8 @@ import boto3
 import yaml
 from framework.credential_providers import run_pcluster_command
 from retrying import retry
+
+from time_utils import minutes
 from utils import (
     ClusterCreationError,
     dict_add_nested_key,
@@ -245,12 +247,19 @@ class Cluster:
         """List login node instances."""
         return self.describe_cluster_instances(node_type="LoginNode")
 
+    @retry(stop_max_attempt_number=5, wait_fixed=minutes(1))
+    def login_nodes_created(self):
+        cluster_info = self.describe_cluster()
+        return cluster_info["loginNodes"][0]["status"] == "ACTIVE"
+
     def get_login_node_public_ip(self):
-        """Return the ip address of the first healthy login node if exists."""
+        """Return the ip address of one of the login nodes."""
         login_nodes = self.describe_login_nodes()
-        for login in login_nodes:
-            if "running" == login["state"]:
-                return login["publicIpAddress"]
+
+        if self.login_nodes_created():
+            ln_node = login_nodes[0]
+            if "running" == login_nodes[0]["state"]:
+                return ln_node["publicIpAddress"]
 
         return None
 
