@@ -1,10 +1,12 @@
+from datetime import datetime
 from typing import Dict
 
 from aws_cdk import aws_autoscaling as autoscaling
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_elasticloadbalancingv2 as elbv2
 from aws_cdk import aws_logs as logs
-from aws_cdk.core import CfnTag, Construct, Fn, NestedStack, Stack
+from aws_cdk.core import CfnTag, Construct, Fn, NestedStack, Stack, CfnResourceSignal, CfnCreationPolicy, \
+    CfnResourceAutoScalingCreationPolicy, CfnWaitCondition, CfnWaitConditionHandle
 
 from pcluster.aws.aws_api import AWSApi
 from pcluster.config.cluster_config import LoginNodesPool, SharedStorageType, SlurmClusterConfig
@@ -25,7 +27,7 @@ from pcluster.templates.cdk_builder_utils import (
     get_user_data_content,
     to_comma_separated_string,
 )
-from pcluster.utils import get_attr, get_http_tokens_setting
+from pcluster.utils import get_attr, get_http_tokens_setting, get_service_endpoint
 
 
 class Pool(Construct):
@@ -59,6 +61,7 @@ class Pool(Construct):
         self.stack_name = stack_name
         self._head_eni = head_eni
         self._cluster_hosted_zone = cluster_hosted_zone
+        self.timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
         self._add_resources()
 
     def _add_resources(self):
@@ -73,7 +76,8 @@ class Pool(Construct):
         self._login_nodes_pool_load_balancer = self._add_login_nodes_pool_load_balancer(
             self._login_nodes_pool_target_group
         )
-
+        _, self.wait_condition_handle = self._add_wait_condition()
+        self.wait_condition_handle_url = self.wait_condition_handle.ref
         self._launch_template = self._add_login_nodes_pool_launch_template()
         self._add_login_nodes_pool_auto_scaling_group()
 
@@ -106,6 +110,9 @@ class Pool(Construct):
 
         ds_config = self._config.directory_service
         ds_generate_keys = str(ds_config.generate_ssh_keys_for_users).lower() if ds_config else "false"
+
+        cloudformation_url = get_service_endpoint("cloudformation", self._config.region)
+
         return ec2.CfnLaunchTemplate(
             self,
             f"LoginNodeLaunchTemplate{self._pool.name}",
@@ -204,6 +211,8 @@ class Pool(Construct):
                                 "LaunchingLifecycleHookName": (
                                     f"{self._login_nodes_stack_id}-LoginNodesLaunchingLifecycleHook"
                                 ),
+                                "CloudFormationUrl": cloudformation_url,
+                                "WaitConditionURL": self.wait_condition_handle_url,
                             },
                             **get_common_user_data_env(self._pool, self._config),
                         },
@@ -226,6 +235,19 @@ class Pool(Construct):
                 ],
             ),
         )
+
+    def _add_wait_condition(self):
+        wait_condition_handle = CfnWaitConditionHandle(
+            self, id="LoginNodeWaitConditionHandle" + self.timestamp
+        )
+        wait_condition = CfnWaitCondition(
+            self,
+            id="LoginNodeWaitCondition" + self.timestamp,
+            count=self._pool.count,
+            handle=wait_condition_handle.ref,
+            timeout="300",
+        )
+        return wait_condition, wait_condition_handle
 
     def _add_login_nodes_pool_auto_scaling_group(self):
         launch_template_specification = autoscaling.CfnAutoScalingGroup.LaunchTemplateSpecificationProperty(
