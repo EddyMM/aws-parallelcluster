@@ -163,9 +163,17 @@ def test_job_level_scaling(
     _submit_job_full_capacity(scheduler_commands, remote_command_executor)
 
 
+@pytest.mark.parametrize("launch_api", ["create_fleet", "run_instances"])
 @pytest.mark.usefixtures("os", "instance", "scheduler")
 def test_scaling_special_cases(
-    region, pcluster_config_reader, clusters_factory, scaling_odcr_stack, scheduler_commands_factory, test_datadir
+    region,
+    scheduler,
+    pcluster_config_reader,
+    clusters_factory,
+    scaling_odcr_stack,
+    scheduler_commands_factory,
+    launch_api,
+    test_datadir,
 ):
     full_cluster_size = 1600  # no of nodes after scaling the cluster up
     downscaled_cluster_size = 1570  # no of nodes after scaling down the cluster
@@ -176,7 +184,7 @@ def test_scaling_special_cases(
         odcr_stack.cfn_resources["integTestsScalingOdcrGroup"]
     )
     cluster_config = pcluster_config_reader(
-        target_capacity_reservation_arn=resource_group_arn, full_cluster_size=full_cluster_size
+        target_capacity_reservation_arn=resource_group_arn, full_cluster_size=full_cluster_size, launch_api=launch_api
     )
     cluster = clusters_factory(cluster_config)
 
@@ -187,6 +195,7 @@ def test_scaling_special_cases(
         config_file="pcluster-upscale.config.yaml",
         target_capacity_reservation_arn=resource_group_arn,
         full_cluster_size=full_cluster_size,
+        launch_api=launch_api,
     )
 
     # Scale up cluster
@@ -200,6 +209,7 @@ def test_scaling_special_cases(
         max_monitoring_time=minutes(max_scaling_time),
         is_scale_down=False,
     )
+    assert_no_errors_in_logs(remote_command_executor, scheduler)
     _assert_compute_nodes_in_cluster_are_from_odcr(cluster, region, resource_group_arn)
     _assert_simple_job_succeeds(scheduler_commands, full_cluster_size, partition="q1")
 
@@ -218,6 +228,7 @@ def test_scaling_special_cases(
         target_capacity_reservation_arn=resource_group_arn,
         downscaled_cluster_size=downscaled_cluster_size,
         full_cluster_size=full_cluster_size,
+        launch_api=launch_api,
     )
     _assert_cluster_update_scaling(
         cluster,
@@ -242,6 +253,7 @@ def test_scaling_special_cases(
         max_monitoring_time=minutes(max_scaling_time),
         is_scale_down=False,
     )
+    assert_no_errors_in_logs(remote_command_executor, scheduler)
     _assert_compute_nodes_in_cluster_are_from_odcr(cluster, region, resource_group_arn)
     _assert_simple_job_succeeds(scheduler_commands, full_cluster_size, partition="q1")
 
