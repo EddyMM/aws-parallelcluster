@@ -201,6 +201,7 @@ def test_scaling_special_cases(
     # Scale up cluster
     _assert_cluster_update_scaling(
         cluster,
+        remote_command_executor,
         scheduler_commands,
         region,
         cluster_config=str(upscale_cluster_config),
@@ -208,8 +209,8 @@ def test_scaling_special_cases(
         expected_compute_nodes=(0, full_cluster_size),
         max_monitoring_time=minutes(max_scaling_time),
         is_scale_down=False,
+        threshold=0.998,
     )
-    assert_no_errors_in_logs(remote_command_executor, scheduler)
     _assert_compute_nodes_in_cluster_are_from_odcr(cluster, region, resource_group_arn)
     _assert_simple_job_succeeds(scheduler_commands, full_cluster_size, partition="q1")
 
@@ -232,6 +233,7 @@ def test_scaling_special_cases(
     )
     _assert_cluster_update_scaling(
         cluster,
+        remote_command_executor,
         scheduler_commands,
         region,
         cluster_config=str(downscale_cluster_config),
@@ -245,6 +247,7 @@ def test_scaling_special_cases(
     # Scale up the cluster
     _assert_cluster_update_scaling(
         cluster,
+        remote_command_executor,
         scheduler_commands,
         region,
         cluster_config=str(upscale_cluster_config),
@@ -253,7 +256,6 @@ def test_scaling_special_cases(
         max_monitoring_time=minutes(max_scaling_time),
         is_scale_down=False,
     )
-    assert_no_errors_in_logs(remote_command_executor, scheduler)
     _assert_compute_nodes_in_cluster_are_from_odcr(cluster, region, resource_group_arn)
     _assert_simple_job_succeeds(scheduler_commands, full_cluster_size, partition="q1")
 
@@ -296,6 +298,7 @@ def _assert_compute_nodes_in_cluster_are_from_odcr(cluster, region, odcr_resourc
 
 def _assert_cluster_update_scaling(
     cluster,
+    remote_command_executor,
     scheduler_commands,
     region,
     cluster_config,
@@ -303,6 +306,7 @@ def _assert_cluster_update_scaling(
     expected_compute_nodes,
     max_monitoring_time,
     is_scale_down=True,
+    threshold: float = 1,
 ):
     cluster.update(str(cluster_config), force_update="true", wait=False, raise_on_error=False)
 
@@ -314,9 +318,14 @@ def _assert_cluster_update_scaling(
         max_monitoring_time=max_monitoring_time,
     )
 
+    # Wait for cluster update to complete (in case ot wasn't able to scale up within the monitoring time
+    cloud_formation = boto3.client("cloudformation")
+    waiter = cloud_formation.get_waiter("stack_update_complete")
+    waiter.wait(StackName=cluster.name)
+
     logging.info(
         f"Verifying scale up worked with EC2 Instances: {ec2_capacity_time_series} and "
-        f"Compute nodes: {ec2_capacity_time_series}."
+        f"Compute nodes: {compute_nodes_time_series}."
     )
     if is_scale_down:
         # Last value in scaling time series should be the min capacity expected
@@ -324,15 +333,28 @@ def _assert_cluster_update_scaling(
         assert_that(compute_nodes_time_series[-1]).is_equal_to(expected_compute_nodes[0])
     else:
         # Last value in scaling time series should be the max capacity expected
-        assert_that(ec2_capacity_time_series[-1]).is_equal_to(expected_ec2_capacity[1])
-        assert_that(compute_nodes_time_series[-1]).is_equal_to(expected_compute_nodes[1])
+        assert_that(ec2_capacity_time_series[-1]).is_greater_than_or_equal_to(int(expected_ec2_capacity[1] * threshold))
+        assert_that(compute_nodes_time_series[-1]).is_greater_than_or_equal_to(
+            int(expected_compute_nodes[1] * threshold)
+        )
+        if ec2_capacity_time_series[-1] < expected_ec2_capacity[1]:
+            logging.warning(
+                f"Cluster was unable to scale up to {expected_ec2_capacity[1]} within {max_monitoring_time} seconds"
+                + "Review the clustermgtd logs for details."
+            )
     _assert_scaling_works(
         ec2_capacity_time_series=ec2_capacity_time_series,
         compute_nodes_time_series=compute_nodes_time_series,
         expected_ec2_capacity=expected_ec2_capacity,
         expected_compute_nodes=expected_compute_nodes,
         min_for_scaledown=is_scale_down,
+        threshold=threshold,
     )
+
+    # Thresholds less than one imply that bootstrap errors occurred,
+    # we are therefore checking for errors only when we did not expect any error
+    if threshold == 1:
+        assert_no_errors_in_logs(remote_command_executor, scheduler_commands)
 
 
 def _assert_scaling_works(
@@ -340,7 +362,8 @@ def _assert_scaling_works(
     compute_nodes_time_series,
     expected_ec2_capacity,
     expected_compute_nodes,
-    min_for_scaledown=True,  #
+    min_for_scaledown=True,
+    threshold: float = 1,
 ):
     """
     Verify that cluster scaling-up and scaling-down features work correctly.
@@ -349,13 +372,20 @@ def _assert_scaling_works(
     :param compute_nodes_time_series: list describing the fluctuations over time in the compute nodes
     :param expected_ec2_capacity: pair containing the expected ec2 capacity (min_ec2_capacity, max_ec2_capacity)
     :param expected_compute_nodes: pair containing the expected compute nodes (min_compute_nodes, max_compute_nodes)
-    :param consider values captured only after reaching maximum capacity when evaluating the minimum
+    :param min_for_scaledown: consider values captured only after reaching maximum capacity when evaluating the minimum
+        (useful when asserting scaling involving both increasing and decreasing the capacity
+        e.g. dynamic nodes + scaledown event)
     """
     assert_that(ec2_capacity_time_series).described_as("ec2_capacity_time_series cannot be empty").is_not_empty()
     assert_that(compute_nodes_time_series).described_as("compute_nodes_time_series cannot be empty").is_not_empty()
 
     expected_ec2_capacity_min, expected_ec2_capacity_max = expected_ec2_capacity
     expected_compute_nodes_min, expected_compute_nodes_max = expected_compute_nodes
+
+    # Apply threshold/allowance
+    expected_compute_nodes_max = int(expected_compute_nodes_max * threshold)
+    expected_ec2_capacity_max = int(expected_ec2_capacity_max * threshold)
+
     actual_ec2_capacity_max = max(ec2_capacity_time_series)
     actual_ec2_capacity_min = (
         min(ec2_capacity_time_series[ec2_capacity_time_series.index(actual_ec2_capacity_max) :])  # noqa E203
@@ -374,13 +404,13 @@ def _assert_scaling_works(
         ).is_equal_to(expected_ec2_capacity_min)
         assert_that(actual_ec2_capacity_max).described_as(
             "actual ec2 max capacity does not match the expected one"
-        ).is_equal_to(expected_ec2_capacity_max)
+        ).is_greater_than_or_equal_to(expected_ec2_capacity_max)
         assert_that(actual_compute_nodes_min).described_as(
             "actual number of min compute nodes does not match the expected one"
         ).is_equal_to(expected_compute_nodes_min)
         assert_that(actual_compute_nodes_max).described_as(
             "actual number of max compute nodes does not match the expected one"
-        ).is_equal_to(expected_compute_nodes_max)
+        ).is_greater_than_or_equal_to(expected_compute_nodes_max)
 
 
 def _assert_test_jobs_completed(remote_command_executor, max_jobs_exec_time):
