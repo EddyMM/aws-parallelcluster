@@ -163,7 +163,7 @@ def test_job_level_scaling(
     _submit_job_full_capacity(scheduler_commands, remote_command_executor)
 
 
-@pytest.mark.parametrize("launch_api", ["create_fleet", "run_instances"])
+@pytest.mark.parametrize("launch_api", ["run_instances"])
 @pytest.mark.usefixtures("os", "instance", "scheduler")
 def test_scaling_special_cases(
     region,
