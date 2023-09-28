@@ -163,7 +163,6 @@ def test_job_level_scaling(
     _submit_job_full_capacity(scheduler_commands, remote_command_executor)
 
 
-@pytest.mark.parametrize("launch_api", ["run_instances"])
 @pytest.mark.usefixtures("os", "instance", "scheduler")
 def test_scaling_special_cases(
     region,
@@ -172,7 +171,6 @@ def test_scaling_special_cases(
     clusters_factory,
     scaling_odcr_stack,
     scheduler_commands_factory,
-    launch_api,
     test_datadir,
 ):
     full_cluster_size = 1600  # no of nodes after scaling the cluster up
@@ -183,81 +181,90 @@ def test_scaling_special_cases(
     resource_group_arn = retrieve_resource_group_arn_from_resource(
         odcr_stack.cfn_resources["integTestsScalingOdcrGroup"]
     )
-    cluster_config = pcluster_config_reader(
-        target_capacity_reservation_arn=resource_group_arn, full_cluster_size=full_cluster_size, launch_api=launch_api
-    )
-    cluster = clusters_factory(cluster_config)
 
-    remote_command_executor = RemoteCommandExecutor(cluster)
-    scheduler_commands = scheduler_commands_factory(remote_command_executor)
+    for launch_api in ["run_instances", "create_fleet"]:
+        cluster_config = pcluster_config_reader(
+            target_capacity_reservation_arn=resource_group_arn,
+            full_cluster_size=full_cluster_size,
+            launch_api=launch_api,
+        )
+        cluster = clusters_factory(cluster_config)
 
-    upscale_cluster_config = pcluster_config_reader(
-        config_file="pcluster-upscale.config.yaml",
-        target_capacity_reservation_arn=resource_group_arn,
-        full_cluster_size=full_cluster_size,
-        launch_api=launch_api,
-    )
+        remote_command_executor = RemoteCommandExecutor(cluster)
+        scheduler_commands = scheduler_commands_factory(remote_command_executor)
 
-    # Scale up cluster
-    _assert_cluster_update_scaling(
-        cluster,
-        remote_command_executor,
-        scheduler_commands,
-        region,
-        cluster_config=str(upscale_cluster_config),
-        expected_ec2_capacity=(0, full_cluster_size),
-        expected_compute_nodes=(0, full_cluster_size),
-        max_monitoring_time=minutes(max_scaling_time),
-        is_scale_down=False,
-        threshold=0.998,
-    )
-    _assert_compute_nodes_in_cluster_are_from_odcr(cluster, region, resource_group_arn)
-    _assert_simple_job_succeeds(scheduler_commands, full_cluster_size, partition="q1")
+        upscale_cluster_config = pcluster_config_reader(
+            config_file="pcluster-upscale.config.yaml",
+            target_capacity_reservation_arn=resource_group_arn,
+            full_cluster_size=full_cluster_size,
+            launch_api=launch_api,
+        )
 
-    # Apply custom partitions
-    output_file_path = render_jinja_template(
-        template_file_path=os.path.join(str(test_datadir), "include_custom_partition_large.sh.jinja"),
-        partition="q1",
-        cr="cr1",
-    )
-    remote_command_executor.run_remote_script(output_file_path, run_as_root=True)
-    _assert_simple_job_succeeds(scheduler_commands, full_cluster_size, partition="q1")
+        # Scale up cluster
+        _assert_cluster_update_scaling(
+            cluster,
+            remote_command_executor,
+            scheduler_commands,
+            region,
+            scheduler,
+            cluster_config=str(upscale_cluster_config),
+            expected_ec2_capacity=(0, full_cluster_size),
+            expected_compute_nodes=(0, full_cluster_size),
+            max_monitoring_time=minutes(max_scaling_time),
+            is_scale_down=False,
+            threshold=0.998,
+        )
+        _assert_compute_nodes_in_cluster_are_from_odcr(cluster, region, resource_group_arn)
+        _assert_simple_job_succeeds(scheduler_commands, full_cluster_size, partition="q1")
 
-    # Scale down cluster
-    downscale_cluster_config = pcluster_config_reader(
-        config_file="pcluster-downscale.config.yaml",
-        target_capacity_reservation_arn=resource_group_arn,
-        downscaled_cluster_size=downscaled_cluster_size,
-        full_cluster_size=full_cluster_size,
-        launch_api=launch_api,
-    )
-    _assert_cluster_update_scaling(
-        cluster,
-        remote_command_executor,
-        scheduler_commands,
-        region,
-        cluster_config=str(downscale_cluster_config),
-        expected_ec2_capacity=(downscaled_cluster_size, full_cluster_size),
-        expected_compute_nodes=(downscaled_cluster_size, full_cluster_size),
-        max_monitoring_time=minutes(max_scaling_time),
-        is_scale_down=True,
-    )
-    _assert_simple_job_succeeds(scheduler_commands, downscaled_cluster_size, partition="q1")
+        # Apply custom partitions
+        output_file_path = render_jinja_template(
+            template_file_path=os.path.join(str(test_datadir), "include_custom_partition_large.sh.jinja"),
+            partition="q1",
+            cr="cr1",
+        )
+        remote_command_executor.run_remote_script(output_file_path, run_as_root=True)
+        _assert_simple_job_succeeds(scheduler_commands, full_cluster_size, partition="q1")
 
-    # Scale up the cluster
-    _assert_cluster_update_scaling(
-        cluster,
-        remote_command_executor,
-        scheduler_commands,
-        region,
-        cluster_config=str(upscale_cluster_config),
-        expected_ec2_capacity=(downscaled_cluster_size, full_cluster_size),
-        expected_compute_nodes=(downscaled_cluster_size, full_cluster_size),
-        max_monitoring_time=minutes(max_scaling_time),
-        is_scale_down=False,
-    )
-    _assert_compute_nodes_in_cluster_are_from_odcr(cluster, region, resource_group_arn)
-    _assert_simple_job_succeeds(scheduler_commands, full_cluster_size, partition="q1")
+        # Scale down cluster
+        downscale_cluster_config = pcluster_config_reader(
+            config_file="pcluster-downscale.config.yaml",
+            target_capacity_reservation_arn=resource_group_arn,
+            downscaled_cluster_size=downscaled_cluster_size,
+            full_cluster_size=full_cluster_size,
+            launch_api=launch_api,
+        )
+        _assert_cluster_update_scaling(
+            cluster,
+            remote_command_executor,
+            scheduler_commands,
+            region,
+            scheduler,
+            cluster_config=str(downscale_cluster_config),
+            expected_ec2_capacity=(downscaled_cluster_size, full_cluster_size),
+            expected_compute_nodes=(downscaled_cluster_size, full_cluster_size),
+            max_monitoring_time=minutes(max_scaling_time),
+            is_scale_down=True,
+        )
+        _assert_simple_job_succeeds(scheduler_commands, downscaled_cluster_size, partition="q1")
+
+        # Scale up the cluster
+        _assert_cluster_update_scaling(
+            cluster,
+            remote_command_executor,
+            scheduler_commands,
+            region,
+            scheduler,
+            cluster_config=str(upscale_cluster_config),
+            expected_ec2_capacity=(downscaled_cluster_size, full_cluster_size),
+            expected_compute_nodes=(downscaled_cluster_size, full_cluster_size),
+            max_monitoring_time=minutes(max_scaling_time),
+            is_scale_down=False,
+        )
+        _assert_compute_nodes_in_cluster_are_from_odcr(cluster, region, resource_group_arn)
+        _assert_simple_job_succeeds(scheduler_commands, full_cluster_size, partition="q1")
+
+        cluster.delete()
 
 
 def _assert_simple_job_succeeds(
@@ -301,6 +308,7 @@ def _assert_cluster_update_scaling(
     remote_command_executor,
     scheduler_commands,
     region,
+    scheduler,
     cluster_config,
     expected_ec2_capacity,
     expected_compute_nodes,
@@ -354,7 +362,16 @@ def _assert_cluster_update_scaling(
     # Thresholds less than one imply that bootstrap errors occurred,
     # we are therefore checking for errors only when we did not expect any error
     if threshold == 1:
-        assert_no_errors_in_logs(remote_command_executor, scheduler_commands)
+        logging.info("Checking for errors in logs")
+        assert_no_errors_in_logs(
+            remote_command_executor,
+            scheduler,
+            ignore_patterns=[
+                "RequestLimitExceeded",
+                "Failed RunInstances request",
+                "Failed CreateFleet request",
+            ],  # Occurs when getting throttled at 1000+ instances
+        )
 
 
 def _assert_scaling_works(
