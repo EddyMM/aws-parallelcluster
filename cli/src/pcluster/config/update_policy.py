@@ -363,13 +363,14 @@ def condition_checker_shared_storage_update_policy(change, patch):
     return result
 
 
-def condition_checker_login_nodes_pools_policy(change, _):
+def condition_checker_login_nodes_pools_policy(change, patch):
     """Login fleet stop is required when a login pool is removed."""
-    return not is_login_pool_removed(change)
+    result = not patch.cluster.has_running_login_nodes()
+    return result or (not is_login_pool_removed(change))
 
 
 def is_login_pool_removed(change):
-    return change.is_list and change.key == "Pools" and change.old_value is not None and change.new_value is None
+    return change.is_list and change.key == "Pools" and change.new_value is not None and change.old_value is None
 
 
 def condition_checker_login_nodes_stop_policy(_, patch):
