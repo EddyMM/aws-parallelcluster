@@ -57,8 +57,6 @@ from tests.common.scaling_common import setup_ec2_launch_override_to_emulate_ice
 from tests.common.schedulers_common import SlurmCommands, TorqueCommands
 from tests.monitoring import structured_log_event_utils
 
-SCALING_STRATEGIES = ["exclusive", "all"]
-
 
 @pytest.mark.usefixtures("instance", "os")
 @pytest.mark.parametrize("use_login_node", [True, False])
@@ -555,14 +553,16 @@ def test_slurm_protected_mode_on_cluster_create(
 
 @pytest.mark.usefixtures("region", "os", "instance", "scheduler")
 @pytest.mark.fast_capacity_failover
+@pytest.mark.parametrize("scaling_strategy", ["all-or-nothing", "greedy-all-or-nothing", "best-effort"])
 def test_fast_capacity_failover(
     pcluster_config_reader,
+    scaling_strategy,
     clusters_factory,
     test_datadir,
     scheduler_commands_factory,
     region,
 ):
-    cluster_config = pcluster_config_reader(scaling_strategies=SCALING_STRATEGIES)
+    cluster_config = pcluster_config_reader(scaling_strategy=scaling_strategy)
     cluster = clusters_factory(cluster_config)
     remote_command_executor = RemoteCommandExecutor(cluster)
     clustermgtd_conf_path = _retrieve_clustermgtd_conf_path(remote_command_executor)
@@ -575,82 +575,81 @@ def test_fast_capacity_failover(
         multi_instance_types_exp_cr="exception-cr-multiple",
     )
 
-    for strategy in SCALING_STRATEGIES:
-        partition = f"queue-{strategy}"
-        # All nodes
-        nodes_in_scheduler = scheduler_commands.get_compute_nodes(partition, all_nodes=True)
-        static_nodes, dynamic_nodes = get_partition_nodes(nodes_in_scheduler)
+    partition = "queue"
+    # All nodes
+    nodes_in_scheduler = scheduler_commands.get_compute_nodes(partition, all_nodes=True)
+    static_nodes, dynamic_nodes = get_partition_nodes(nodes_in_scheduler)
 
-        # Nodes in Single Instance Type CR
-        ice_single_dynamic_nodes = [node for node in dynamic_nodes if "ice-compute-resource" in node]
-        ice_single_static_nodes = [node for node in static_nodes if "ice-compute-resource" in node]
+    # Nodes in Single Instance Type CR
+    ice_single_dynamic_nodes = [node for node in dynamic_nodes if "ice-compute-resource" in node]
+    ice_single_static_nodes = [node for node in static_nodes if "ice-compute-resource" in node]
 
-        # Nodes in Multiple Instance Type (overridden with invalid values)
-        ice_multi_dynamic_nodes = [node for node in dynamic_nodes if "ice-cr-multiple" in node]
-        ice_multi_static_nodes = [node for node in static_nodes if "ice-cr-multiple" in node]
+    # Nodes in Multiple Instance Type (overridden with invalid values)
+    ice_multi_dynamic_nodes = [node for node in dynamic_nodes if "ice-cr-multiple" in node]
+    ice_multi_static_nodes = [node for node in static_nodes if "ice-cr-multiple" in node]
 
-        # Nodes in Multiple Instance Type (overridden with values that will trigger an exception)
-        exception_multi_dynamic_nodes = [node for node in dynamic_nodes if "exception-cr-multiple" in node]
-        exception_multi_static_nodes = [node for node in static_nodes if "exception-cr-multiple" in node]
+    # Nodes in Multiple Instance Type (overridden with values that will trigger an exception)
+    exception_multi_dynamic_nodes = [node for node in dynamic_nodes if "exception-cr-multiple" in node]
+    exception_multi_static_nodes = [node for node in static_nodes if "exception-cr-multiple" in node]
 
-        # Checks Fast Failover in case of Single Instance Type - using RunInstances API
-        # Requires 1 static node in the CR, expects the job to be partially reallocated in a different CR and succeed
-        _test_enable_fast_capacity_failover(
-            partition,
-            scheduler_commands,
-            remote_command_executor,
-            clustermgtd_conf_path,
-            ice_single_static_nodes,
-            ice_single_dynamic_nodes,
-            target_compute_resource="ice-compute-resource",
-            expected_error_code="InsufficientHostCapacity",
-        )
+    # Checks Fast Failover in case of Single Instance Type - using RunInstances API
+    # Requires 1 static node in the CR, expects the job to be partially reallocated in a different CR and succeed
+    _test_enable_fast_capacity_failover(
+        partition,
+        scheduler_commands,
+        remote_command_executor,
+        clustermgtd_conf_path,
+        ice_single_static_nodes,
+        ice_single_dynamic_nodes,
+        target_compute_resource="ice-compute-resource",
+        expected_error_code="InsufficientHostCapacity",
+    )
 
-        # Check observability logic
-        structured_log_event_utils.assert_that_event_exists(
-            cluster, r".+\.slurm_resume_events", "node-launch-failure-count"
-        )
-        test_cluster_health_metric(["InsufficientCapacityErrors"], cluster.cfn_name, region)
+    # Check observability logic
+    structured_log_event_utils.assert_that_event_exists(
+        cluster, r".+\.slurm_resume_events", "node-launch-failure-count"
+    )
+    test_cluster_health_metric(["InsufficientCapacityErrors"], cluster.cfn_name, region)
 
-        # Test behavior with RunInstance when Fast Failover is disabled
-        # Requires 1 static node in the CR, force the job to stay in the CR and expects it to fail
-        _test_disable_fast_capacity_failover(
-            partition,
-            scheduler_commands,
-            remote_command_executor,
-            clustermgtd_conf_path,
-            ice_single_static_nodes,
-            ice_single_dynamic_nodes,
-            target_compute_resource="ice-compute-resource",
-            expected_error_code="InsufficientHostCapacity",
-        )
+    # Test behavior with RunInstance when Fast Failover is disabled
+    # Requires 1 static node in the CR, force the job to stay in the CR and expects it to fail
+    _test_disable_fast_capacity_failover(
+        partition,
+        scheduler_commands,
+        remote_command_executor,
+        clustermgtd_conf_path,
+        ice_single_static_nodes,
+        ice_single_dynamic_nodes,
+        target_compute_resource="ice-compute-resource",
+        expected_error_code="InsufficientHostCapacity",
+    )
 
-        # Checks Fast Failover in case of Multiple Instance Types - using CreateFleet API
-        # Requires 1 static node in the CR, expects the job to be partially reallocated in a different CR and succeed
-        # CreateFleet will return an empty list of instances, that should trigger FFO behavior
-        _test_enable_fast_capacity_failover(
-            partition,
-            scheduler_commands,
-            remote_command_executor,
-            clustermgtd_conf_path,
-            ice_multi_static_nodes,
-            ice_multi_dynamic_nodes,
-            target_compute_resource="ice-cr-multiple",
-            expected_error_code="InsufficientInstanceCapacity",
-        )
+    # Checks Fast Failover in case of Multiple Instance Types - using CreateFleet API
+    # Requires 1 static node in the CR, expects the job to be partially reallocated in a different CR and succeed
+    # CreateFleet will return an empty list of instances, that should trigger FFO behavior
+    _test_enable_fast_capacity_failover(
+        partition,
+        scheduler_commands,
+        remote_command_executor,
+        clustermgtd_conf_path,
+        ice_multi_static_nodes,
+        ice_multi_dynamic_nodes,
+        target_compute_resource="ice-cr-multiple",
+        expected_error_code="InsufficientInstanceCapacity",
+    )
 
-        # Test behavior with CreateFleet when Fast Failover is disabled
-        # Requires 1 static node in the CR, force the job to stay in the CR and expects it to fail
-        _test_disable_fast_capacity_failover(
-            partition,
-            scheduler_commands,
-            remote_command_executor,
-            clustermgtd_conf_path,
-            exception_multi_static_nodes,
-            exception_multi_dynamic_nodes,
-            target_compute_resource="exception-cr-multiple",
-            expected_error_code="InvalidParameterValue",
-        )
+    # Test behavior with CreateFleet when Fast Failover is disabled
+    # Requires 1 static node in the CR, force the job to stay in the CR and expects it to fail
+    _test_disable_fast_capacity_failover(
+        partition,
+        scheduler_commands,
+        remote_command_executor,
+        clustermgtd_conf_path,
+        exception_multi_static_nodes,
+        exception_multi_dynamic_nodes,
+        target_compute_resource="exception-cr-multiple",
+        expected_error_code="InvalidParameterValue",
+    )
 
 
 @pytest.mark.usefixtures("region", "os", "instance", "scheduler")
