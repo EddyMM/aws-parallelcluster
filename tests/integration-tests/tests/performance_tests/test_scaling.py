@@ -90,6 +90,7 @@ def test_scaling_stress_test(
     pcluster_config_reader,
     scheduler_commands_factory,
     clusters_factory,
+    test_datadir,
 ):
     """
     This test scales a cluster up and down while periodically monitoring some primary metrics.
@@ -108,10 +109,10 @@ def test_scaling_stress_test(
 
     test_params = [
         # scaling_max_time_in_mins, scaling_target, head_node_instance_type, shared_headnode_storage
-        # (15, 1000, "c5.24xlarge", "Efs"),
-        # (15, 2000, "c5.24xlarge", "Efs"),
-        (20 , 3000, "c5.24xlarge", "Efs", "best-effort"),
-        # (15, 4000, "c5.24xlarge", "Efs"),
+        (20, 1000, "c5.24xlarge", "Efs", "best-effort"),
+        (20, 2000, "c5.24xlarge", "Efs", "best-effort"),
+        (20, 3000, "c5.24xlarge", "Efs", "best-effort"),
+        (20, 4000, "c5.24xlarge", "Efs", "best-effort"),
     ]
 
     for (
@@ -119,6 +120,7 @@ def test_scaling_stress_test(
     ) in test_params:
         # Creating cluster with intended head node instance type and scaling parameters
         cluster_config = pcluster_config_reader(
+            output_file=os.path.join(str(test_datadir), f"{scaling_target}-nodes"),
             # Prevent nodes being set down before we start monitoring the scale down metrics
             scaledown_idletime=scaling_max_time_in_mins,
             scaling_target=scaling_target,
